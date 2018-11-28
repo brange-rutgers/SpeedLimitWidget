@@ -3,6 +3,12 @@
     package="edu.rutgers.brange.speedlimitwidget">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
 
     <application
         android:allowBackup="true"
@@ -11,6 +17,17 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+
+        <meta-data
+            android:name="com.here.android.maps.appid"
+            android:value="DGzCqklbPz256HNREEte" />
+        <meta-data
+            android:name="com.here.android.maps.apptoken"
+            android:value="lElDKbpXC89oAEhOz5qKMw" />
+        <meta-data
+            android:name="com.here.android.maps.license.key"
+            android:value="YG2a/k2TTSXZPr2tkX0CW6Kvx/pja+6dsSuPt3bbD3yqNLsmfKCrlkbUnI96uyBU2JwFOepaCyQqVqtklrwNcpYZzBfRh8SdlKWvOHd47LgxewuERhUpW27JdWdOvZgn/tCfFJe/wyWoyEN63Fexo1HoArFZImzv7qcCxLHI7J3+L5ePmKfApr9tpFzD1tYD5YbMFgOQiyFSzpu253V2o79RkMAGf8G7H3nXGTMx9T4CpzRJO1LLQ3VrsvaSB5bM4DRQJ3/RHmqBxl3Fv2xjtbXASsrdAzMSoqkmHq4gko1WTY+wE8cPr3Z64Srnqa4G0B67FbViyAOdG+/9kvGTPv4a3I/eRgo3s6CZnSS/3PjjLtyiXI7YPSnXSVCEBjJ2BLKjOr8Hy172vF1N/tjpviCuJgER3KV4IQl/C/tXPVGfD3mYs+YF5Onhwk8fQUnRNNamaC6scmHTiuWiAfnRAxTLxSzufSkrCfpuQ0DMk//WdBj1RKprjRRjq7IruTpK58FO/RaHzm4tq4VksMsi9bPqELrekFSZABHtidQ4HdvGrRk+KewRagGMfO3YkCMGQu3mVHutAgPtbOCjygGdGs/ADaK9bRr6P688OBwJkh4XoLwta97pDBhCKAItVgMXg3QX25hJ43wsfVZSiEBwMcHEEgYM0ozvSnFNvuLZ1w4=" />
+
         <activity android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -22,7 +39,18 @@
         <service
             android:name=".FloatingViewService"
             android:enabled="true"
-            android:exported="true"></service>
+            android:exported="true">
+
+        </service>
+        <service
+            android:name="com.here.android.mpa.service.MapService"
+            android:exported="true"
+            android:label="HereMapService"
+            android:process="global.Here.Map.Service.v3">
+            <intent-filter>
+                <action android:name="com.here.android.mpa.service.MapService.v3"></action>
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>
