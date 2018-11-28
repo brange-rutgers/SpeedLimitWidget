@@ -16,7 +16,6 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.support.annotation.NonNull;
-import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.view.Gravity;
@@ -42,15 +41,10 @@ import com.here.android.mpa.common.PositioningManager;
 import com.here.android.mpa.guidance.NavigationManager;
 import com.here.android.mpa.prefetcher.MapDataPrefetcher;
 
-import org.json.JSONArray;
-import org.json.JSONObject;
-
 import java.io.BufferedInputStream;
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -306,6 +300,9 @@ public class FloatingViewService extends Service {
         locationManager.removeUpdates(locationListener);
     }
 
+    boolean favoriteAdded = false;
+    private Tuple<Location, java.sql.Timestamp> mostRecentFavorite;
+
     // Trigger new location updates at interval
     private void startLocationUpdates() {
 
@@ -336,13 +333,14 @@ public class FloatingViewService extends Service {
 
                         int currentSpeedLimitTransformed = 0;
                         double currentSpeedmps = mgp.getSpeed();
-                        int currentSpeed = (int) meterPerSecToKmPerHour(currentSpeedmps);
-                        currentSpeed = (int) meterPerSecToMilesPerHour(currentSpeedmps);
+                        int currentSpeed = (int) LocationHelper.meterPerSecToKmPerHour(currentSpeedmps);
+                        currentSpeed = (int) LocationHelper.meterPerSecToMilesPerHour(currentSpeedmps);
 
                         if (mgp.getRoadElement() != null) {
                             double currentSpeedLimit = mgp.getRoadElement().getSpeedLimit();
-                            currentSpeedLimitTransformed = (int) meterPerSecToKmPerHour(currentSpeedLimit);
-                            currentSpeedLimitTransformed = mapMilesPerHour(meterPerSecToMilesPerHour(currentSpeedLimit));
+                            currentSpeedLimitTransformed = (int) LocationHelper.meterPerSecToKmPerHour(currentSpeedLimit);
+                            currentSpeedLimitTransformed = LocationHelper.mapMilesPerHour(
+                                    LocationHelper.meterPerSecToMilesPerHour(currentSpeedLimit));
                         }
 
                         //updateCurrentSpeedView(currentSpeed, currentSpeedLimitTransformed);
@@ -360,10 +358,10 @@ public class FloatingViewService extends Service {
                 }
             };
 
-
             FusedLocationProviderClient fusedLocationProviderClient = getFusedLocationProviderClient(this);
             locationManager = (LocationManager) getSystemService(Context.LOCATION_SERVICE);
             Criteria criteria = new Criteria();
+            criteria.setAccuracy(Criteria.ACCURACY_FINE);
             String bestProvider = locationManager.getBestProvider(criteria, true);
             Location location = locationManager.getLastKnownLocation(bestProvider);
             locationListener = new LocationListener() {
@@ -391,38 +389,28 @@ public class FloatingViewService extends Service {
         }
     }
 
-    private void onLocationChanged(Location location) {
+    private void onLocationChanged(@NonNull Location location) {
         String msg = "New Location Update: " + location.getLatitude() + "," + location.getLongitude();
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
 
-        drivePath.push(new Tuple(location, new java.sql.Timestamp(calendar.getTime().getTime())));
+        Tuple<Location, java.sql.Timestamp> currentLocation = new Tuple(location, new java.sql.Timestamp(calendar.getTime().getTime()));
+        drivePath.push(currentLocation);
+        updateFavoriteLocation(currentLocation);
         int maxLocations = drivePath.getMaxLocations();
-        if (drivePath.size() == maxLocations) {
-            java.sql.Timestamp t1 = drivePath.get(maxLocations - 1).y;
-            int index = -1;
-            for (int i = maxLocations - 2; i >= 0; i--) {
-                java.sql.Timestamp t0 = drivePath.get(i).y;
-                if (t1.getTime() - t0.getTime() > SAMPLE_RATE - SAMPLE_RATE) {
-                    index = i;
-                    break;
-                }
-            }
+        updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(location.getSpeed()), 0);
+    }
 
-            if (false) {
-                if (index != -1) {
-                    //drivePath.query();
-                    updateCurrentSpeedView((int) Math.round(
-                            getSpeed(drivePath.get(index).x,
-                                    drivePath.get(index).y,
-                                    drivePath.get(maxLocations - 1).x,
-                                    drivePath.get(maxLocations - 1).y)),
-                            0);
-                }
-            } else {
-                updateCurrentSpeedView((int) meterPerSecToMilesPerHour(location.getSpeed()), 0);
+    public void updateFavoriteLocation(Tuple<Location, java.sql.Timestamp> currentLocation) {
+        if (mostRecentFavorite == null) {
+            mostRecentFavorite = currentLocation;
+        } else if (LocationHelper.distance(mostRecentFavorite.x, currentLocation.x) < 50) {
+            if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * 3600 && !favoriteAdded) {
+                MainActivity.upateFavorites("Custom Name", mostRecentFavorite.x, "");
+                favoriteAdded = true;
             }
         } else {
-            updateCurrentSpeedView((int) meterPerSecToMilesPerHour(location.getSpeed()), 0);
+            mostRecentFavorite = currentLocation;
+            favoriteAdded = false;
         }
     }
 
@@ -482,7 +470,7 @@ public class FloatingViewService extends Service {
     }
 
     private void stopManagersAndListeners() {
-        stopListners();
+        stopListeners();
         stopPositioningManager();
         stopPositioningManager();
     }
@@ -512,33 +500,12 @@ public class FloatingViewService extends Service {
         NavigationManager.getInstance().stop();
     }
 
-    private double meterPerSecToKmPerHour(double speed) {
-        return (speed * 3.6);
-    }
-
-    private double meterPerSecToMilesPerHour(double speed) {
-        return (speed * 2.236942);
-    }
-
-    private int mapMilesPerHour(double speed) {
-        for (int i = 0; i < 120; i += 5) {
-            if (Math.abs(speed - i) < 5) {
-                if (Math.abs(speed - (i + 5)) < Math.abs(speed - i)) {
-                    return i + 5;
-                } else {
-                    return i;
-                }
-            }
-        }
-        return (int) Math.ceil(speed);
-    }
-
     public void startListeners() {
         PositioningManager.getInstance().addListener(new WeakReference<>(positionLister));
         MapDataPrefetcher.getInstance().addListener(prefetcherListener);
     }
 
-    public void stopListners() {
+    public void stopListeners() {
         PositioningManager.getInstance().removeListener(positionLister);
         MapDataPrefetcher.getInstance().removeListener(prefetcherListener);
     }
@@ -601,7 +568,6 @@ public class FloatingViewService extends Service {
     class Path extends LinkedList<Tuple<Location, java.sql.Timestamp>> {
         private static final int MAX_LOCATIONS = 5;
         private int maxLocations;
-        private String apiKey = "AIzaSyD4qvj0wjBGYrwNCleWazn52l09KVHfdzY";
 
         public Path() {
             super();
@@ -610,7 +576,6 @@ public class FloatingViewService extends Service {
 
         public Path(String apiKey) {
             this();
-            this.apiKey = apiKey;
         }
 
         public Path(int maxLocations) {
@@ -649,11 +614,6 @@ public class FloatingViewService extends Service {
                 path += "|" + this.get(i).x.getLatitude() + "," + this.get(i).x.getLongitude();
             }
             return path;
-        }
-
-        public String getRequestUrl() {
-            String url = "https://roads.googleapis.com/v1/speedLimits?path=" + getPath() + "&key=" + apiKey;
-            return url;
         }
 
         public String getRequestUrl2() {

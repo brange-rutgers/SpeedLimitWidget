@@ -1,11 +1,15 @@
 <resources>
     <string name="app_name">Speed Limit Widget</string>
+    <string name="filter_string_title">Speed Limit Widget</string>
 
-    <!-- TODO: Remove or change this placeholder text -->
     <string name="hello_blank_fragment">Hello blank fragment</string>
 
     <string name="navigation_speed_label_km">km/h</string>
     <string name="navigation_speed_label_m">m/h</string>
 
     <string name="navigation_speed_limit_default"></string>
+
+    <string name="custom_favorite_name_default">Custom Name</string>
+    <string name="custom_favorite_name">Home</string>
+    <string name="unknown_address">Unknown Address</string>
 </resources>

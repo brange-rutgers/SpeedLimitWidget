@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="edu.rutgers.brange.speedlimitwidget">
 
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
@@ -16,17 +17,18 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
-        android:theme="@style/AppTheme">
+        android:theme="@style/AppTheme"
+        tools:ignore="GoogleAppIndexingWarning">
 
         <meta-data
             android:name="com.here.android.maps.appid"
-            android:value="DGzCqklbPz256HNREEte" />
+            android:value="@string/here_app_id" />
         <meta-data
             android:name="com.here.android.maps.apptoken"
-            android:value="lElDKbpXC89oAEhOz5qKMw" />
+            android:value="@string/here_app_token" />
         <meta-data
             android:name="com.here.android.maps.license.key"
-            android:value="YG2a/k2TTSXZPr2tkX0CW6Kvx/pja+6dsSuPt3bbD3yqNLsmfKCrlkbUnI96uyBU2JwFOepaCyQqVqtklrwNcpYZzBfRh8SdlKWvOHd47LgxewuERhUpW27JdWdOvZgn/tCfFJe/wyWoyEN63Fexo1HoArFZImzv7qcCxLHI7J3+L5ePmKfApr9tpFzD1tYD5YbMFgOQiyFSzpu253V2o79RkMAGf8G7H3nXGTMx9T4CpzRJO1LLQ3VrsvaSB5bM4DRQJ3/RHmqBxl3Fv2xjtbXASsrdAzMSoqkmHq4gko1WTY+wE8cPr3Z64Srnqa4G0B67FbViyAOdG+/9kvGTPv4a3I/eRgo3s6CZnSS/3PjjLtyiXI7YPSnXSVCEBjJ2BLKjOr8Hy172vF1N/tjpviCuJgER3KV4IQl/C/tXPVGfD3mYs+YF5Onhwk8fQUnRNNamaC6scmHTiuWiAfnRAxTLxSzufSkrCfpuQ0DMk//WdBj1RKprjRRjq7IruTpK58FO/RaHzm4tq4VksMsi9bPqELrekFSZABHtidQ4HdvGrRk+KewRagGMfO3YkCMGQu3mVHutAgPtbOCjygGdGs/ADaK9bRr6P688OBwJkh4XoLwta97pDBhCKAItVgMXg3QX25hJ43wsfVZSiEBwMcHEEgYM0ozvSnFNvuLZ1w4=" />
+            android:value="@string/here_key" />
 
         <activity android:name=".MainActivity">
             <intent-filter>

@@ -1,8 +1,11 @@
 package edu.rutgers.brange.speedlimitwidget;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.database.sqlite.SQLiteDatabase;
+import android.location.Location;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -21,18 +24,30 @@ public class MainActivity extends AppCompatActivity {
     private static final int CODE_DRAW_OVER_OTHER_APP_PERMISSION = -1010101;
     private static final boolean START_WITHOUT_VIEW = true;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
+    public static SQLiteDatabase db;
+    public static SpeedLimitWidgetDbHelper dbHelper;
+    public static FavoritesCursorAdapter adapterFavorites;
 
-        // check Android version to request permissions
-        if (shouldCheckOverlayPermission()) {
-            requestOverlayPermissions();
-        } else if (shouldCheckOtherPermissions()) {
-            requestOtherPermissions();
-        } else {
-            startService();
+    public static void upateFavorites(String customName, Location location, String address) {
+        ContentValues cv;
+        cv = new ContentValues();
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME, customName);
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE, location.getLatitude()); //These Fields should be your String values of actual column names
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE, location.getLongitude()); //These Fields should be your String values of actual column names
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_ADDRESS, address);
+        long id;
+        String whereClause = FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + "=? AND " + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + "=?";
+        id = db.update(
+                FavoritePlacesContract.ContractEntry.TABLE_NAME,
+                cv,
+                whereClause,
+                new String[]
+                        {
+                                location.getLatitude() + "",
+                                location.getLongitude() + ""
+                        });
+        if (id == 0) {
+            id = db.insert(FavoritePlacesContract.ContractEntry.TABLE_NAME, null, cv);
         }
     }
 
@@ -173,5 +188,23 @@ public class MainActivity extends AppCompatActivity {
     private void startWithoutView(){
         startService(new Intent(MainActivity.this, FloatingViewService.class));
         finish();
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        dbHelper = new SpeedLimitWidgetDbHelper(this);
+        db = dbHelper.getWritableDatabase();
+
+        // check Android version to request permissions
+        if (shouldCheckOverlayPermission()) {
+            requestOverlayPermissions();
+        } else if (shouldCheckOtherPermissions()) {
+            requestOtherPermissions();
+        } else {
+            startService();
+        }
     }
 }
