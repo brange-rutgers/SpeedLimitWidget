@@ -63,12 +63,18 @@ public class FloatingViewService extends Service {
 
     private WindowManager mWindowManager;
     private View mFloatingView;
-    PositioningManager.OnPositionChangedListener positionLister;
+
+    static Path drivePath;
+    MapEngine mapEngine;
+    PositioningManager positioningManager;
+    MapDataPrefetcher mapDataPrefetcher;
+    NavigationManager navigationManager;
     MapDataPrefetcher.Adapter prefetcherListener;
+
     Calendar calendar = Calendar.getInstance();
     private long UPDATE_INTERVAL = 10 * 1000;  /* 10 secs */
     private long FASTEST_INTERVAL = 2000; /* 2 sec */
-    private Path drivePath;
+    PositioningManager.OnPositionChangedListener positionListener;
     private SpeedometerView speedometerView;
     private TextView speedLimitTextViewExpanded;
 
@@ -209,6 +215,7 @@ public class FloatingViewService extends Service {
                 //Open the application  click.
                 Intent intent = new Intent(FloatingViewService.this, MainActivity.class);
                 intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                intent.putExtra(MainActivity.START_ACTIVITY_WITH_VIEW, true);
                 startActivity(intent);
 
                 //close the service and remove view from the view hierarchy
@@ -316,14 +323,14 @@ public class FloatingViewService extends Service {
 
             initSDK();
 
-            positionLister = new PositioningManager.OnPositionChangedListener() {
+            positionListener = new PositioningManager.OnPositionChangedListener() {
                 @Override
                 public void onPositionUpdated(PositioningManager.LocationMethod locationMethod,
                                               GeoPosition geoPosition, boolean b) {
 
-                    if (PositioningManager.getInstance().getRoadElement() == null && !fetchingDataInProgress) {
+                    if (positioningManager.getRoadElement() == null && !fetchingDataInProgress) {
                         GeoBoundingBox areaAround = new GeoBoundingBox(geoPosition.getCoordinate(), 500, 500);
-                        MapDataPrefetcher.getInstance().fetchMapData(areaAround);
+                        mapDataPrefetcher.fetchMapData(areaAround);
                         fetchingDataInProgress = true;
                     }
 
@@ -390,8 +397,10 @@ public class FloatingViewService extends Service {
     }
 
     private void onLocationChanged(@NonNull Location location) {
+        /*
         String msg = "New Location Update: " + location.getLatitude() + "," + location.getLongitude();
         Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+        */
 
         Tuple<Location, java.sql.Timestamp> currentLocation = new Tuple(location, new java.sql.Timestamp(calendar.getTime().getTime()));
         drivePath.push(currentLocation);
@@ -447,7 +456,8 @@ public class FloatingViewService extends Service {
     private void initSDK() {
         final ApplicationContext appContext = new ApplicationContext(getApplicationContext());
 
-        MapEngine.getInstance().init(appContext, new OnEngineInitListener() {
+        mapEngine = MapEngine.getInstance();
+        mapEngine.init(appContext, new OnEngineInitListener() {
             @Override
             public void onEngineInitializationCompleted(Error error) {
                 if (error == Error.NONE) {
@@ -465,33 +475,44 @@ public class FloatingViewService extends Service {
     private void startMangersAndListeners() {
         startPositioningManager();
         startNavigationManager();
-
-        startListeners();
+        startMapDataPrefetcher();
     }
 
     private void stopManagersAndListeners() {
-        stopListeners();
-        stopPositioningManager();
-        stopPositioningManager();
-    }
+        try {
+            stopMapDataPrefetcher();
+            stopNavigationManager();
+            stopPositioningManager();
+        } catch (Exception e) {
 
-    private void startPositioningManager() {
-        boolean positioningManagerStarted = PositioningManager.getInstance().start(PositioningManager.LocationMethod.GPS_NETWORK);
-
-        if (!positioningManagerStarted) {
-            //handle error here
         }
     }
 
-    private void stopPositioningManager() {
-        PositioningManager.getInstance().stop();
+    private void startPositioningManager() {
+        positioningManager = PositioningManager.getInstance();
+        boolean positioningManagerStarted = positioningManager.start(PositioningManager.LocationMethod.GPS_NETWORK);
+
+        if (positioningManagerStarted) {
+            positioningManager.addListener(new WeakReference<>(positionListener));
+        } else {
+            //handle error here
+            Toast.makeText(this, "PosisitioningManager not started", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    public void stopPositioningManager() {
+        positioningManager.removeListener(positionListener);
+        positioningManager.stop();
     }
 
     private void startNavigationManager() {
-        NavigationManager.Error navError = NavigationManager.getInstance().startTracking();
+        navigationManager = NavigationManager.getInstance();
+        NavigationManager.Error navError = navigationManager.startTracking();
 
-        if (navError != NavigationManager.Error.NONE) {
+        if (navError == NavigationManager.Error.NONE) {
+        } else {
             //handle error navError.toString());
+            Toast.makeText(this, "NavigationManager not started", Toast.LENGTH_LONG).show();
         }
 
     }
@@ -500,14 +521,13 @@ public class FloatingViewService extends Service {
         NavigationManager.getInstance().stop();
     }
 
-    public void startListeners() {
-        PositioningManager.getInstance().addListener(new WeakReference<>(positionLister));
-        MapDataPrefetcher.getInstance().addListener(prefetcherListener);
+    private void startMapDataPrefetcher() {
+        mapDataPrefetcher = MapDataPrefetcher.getInstance();
+        mapDataPrefetcher.addListener(prefetcherListener);
     }
 
-    public void stopListeners() {
-        PositioningManager.getInstance().removeListener(positionLister);
-        MapDataPrefetcher.getInstance().removeListener(prefetcherListener);
+    private void stopMapDataPrefetcher() {
+        mapDataPrefetcher.removeListener(prefetcherListener);
     }
 
     private void updateCurrentSpeedView(int currentSpeed, int currentSpeedLimit) {
@@ -534,18 +554,12 @@ public class FloatingViewService extends Service {
     private void updateCurrentSpeedLimitView(int currentSpeedLimit) {
 
         String currentSpeedLimitText;
-        int textColorId;
-        int backgroundImageId;
 
         if (currentSpeedLimit > 0) {
             currentSpeedLimitText = String.valueOf(currentSpeedLimit);
-            textColorId = R.color.limitText;
-            backgroundImageId = R.drawable.limit_circle_background;
             resetColoredRanges(currentSpeedLimit);
         } else {
             currentSpeedLimitText = getResources().getString(R.string.navigation_speed_limit_default);
-            textColorId = R.color.noLimitText;
-            backgroundImageId = R.drawable.no_limit_circle_background;
         }
         //currentSpeedLimitView.setText(currentSpeedLimitText);
         //currentSpeedLimitView.setTextColor(getResources().getColor(textColorId));

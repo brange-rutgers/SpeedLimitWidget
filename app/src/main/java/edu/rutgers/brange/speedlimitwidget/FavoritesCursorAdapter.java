@@ -4,12 +4,22 @@ import android.content.Context;
 import android.database.Cursor;
 import android.location.Address;
 import android.location.Geocoder;
+import android.location.Location;
+import android.location.LocationProvider;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.CursorAdapter;
 import android.widget.EditText;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import com.here.android.mpa.common.GeoBoundingBox;
+import com.here.android.mpa.mapping.Map;
+import com.here.android.mpa.mapping.MapRoute;
+import com.here.android.mpa.routing.RouteResult;
+import com.here.android.mpa.routing.Router;
+import com.here.android.mpa.routing.RoutingError;
 
 import java.io.IOException;
 import java.util.List;
@@ -34,13 +44,55 @@ public class FavoritesCursorAdapter extends CursorAdapter {
     @Override
     public void bindView(View view, Context context, Cursor cursor) {
         EditText customNameView = view.findViewById(R.id.custom_name);
-        TextView addressView = view.findViewById(R.id.address);
+        EditText addressView = view.findViewById(R.id.address);
+        final TextView minutesLeftView = view.findViewById(R.id.minutes_to_go);
 
         //int id = Integer.parseInt(cursor.getString(cursor.getColumnIndexOrThrow(_ID)));
         String customNameString = cursor.getString(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME));
         String addressString = cursor.getString(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_ADDRESS));
         double latitude = cursor.getDouble(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE));
         double longitude = cursor.getDouble(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE));
+
+        Location location = new Location("");
+        location.reset();
+        location.setLatitude(latitude);
+        location.setLongitude(longitude);
+
+        final Router.Listener<List<RouteResult>, RoutingError> listener = new Router.Listener<List<RouteResult>, RoutingError>() {
+            @Override
+            public void onProgress(int i) {
+                /* The calculation progress can be retrieved in this callback. */
+            }
+
+            @Override
+            public void onCalculateRouteFinished(List<RouteResult> routeResults,
+                                                 RoutingError routingError) {
+                // TODO Get route time
+                /* Calculation is done. Let's handle the result */
+                if (routingError == RoutingError.NONE) {
+                    if (routeResults.get(0).getRoute() != null) {
+                        /* Create a MapRoute so that it can be placed on the map */
+                        MapRoute m_mapRoute = new MapRoute(routeResults.get(0).getRoute());
+                        /*
+                         * We may also want to make sure the map view is orientated properly
+                         * so the entire route can be easily seen.
+                         */
+                        GeoBoundingBox gbb = routeResults.get(0).getRoute()
+                                .getBoundingBox();
+                    } else {
+                        // TODO Handle Error
+                    }
+                } else {
+                    // TODO Handle Error
+                }
+            }
+        };
+
+        if (FloatingViewService.drivePath != null && FloatingViewService.drivePath.size() > 0) {
+            int size = FloatingViewService.drivePath.size();
+            LocationHelper.calculateRoute(FloatingViewService.drivePath.get(size - 1).x, location, listener);
+        }
+
 
         customNameView.setText(customNameString);
 

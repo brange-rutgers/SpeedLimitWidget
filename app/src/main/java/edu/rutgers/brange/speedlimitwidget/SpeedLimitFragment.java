@@ -149,21 +149,13 @@ public class SpeedLimitFragment extends Fragment {
     private void updateCurrentSpeedLimitView(int currentSpeedLimit) {
 
         String currentSpeedLimitText;
-        int textColorId;
-        int backgroundImageId;
 
         if (currentSpeedLimit > 0) {
             currentSpeedLimitText = String.valueOf(currentSpeedLimit);
-            textColorId = R.color.limitText;
-            backgroundImageId = R.drawable.limit_circle_background;
         } else {
             currentSpeedLimitText = getResources().getString(R.string.navigation_speed_limit_default);
-            textColorId = R.color.noLimitText;
-            backgroundImageId = R.drawable.no_limit_circle_background;
         }
         currentSpeedLimitView.setText(currentSpeedLimitText);
-        currentSpeedLimitView.setTextColor(getResources().getColor(textColorId));
-        currentSpeedLimitView.setBackgroundResource(backgroundImageId);
     }
 
 }

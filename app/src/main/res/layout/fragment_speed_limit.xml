@@ -17,7 +17,6 @@
             android:id="@+id/currentSpeedLimit"
             android:layout_width="50dp"
             android:layout_height="50dp"
-            android:background="@drawable/no_limit_circle_background"
             android:gravity="center_vertical"
             android:text="@string/navigation_speed_limit_default"
             android:textAlignment="center"

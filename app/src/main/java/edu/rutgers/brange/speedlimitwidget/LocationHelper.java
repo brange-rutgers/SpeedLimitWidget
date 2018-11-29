@@ -1,8 +1,26 @@
 package edu.rutgers.brange.speedlimitwidget;
 
 import android.location.Location;
+import android.widget.Toast;
 
-public class LocationHelper {
+import com.here.android.mpa.common.GeoBoundingBox;
+import com.here.android.mpa.common.GeoCoordinate;
+import com.here.android.mpa.mapping.Map;
+import com.here.android.mpa.mapping.MapRoute;
+import com.here.android.mpa.routing.CoreRouter;
+import com.here.android.mpa.routing.RouteOptions;
+import com.here.android.mpa.routing.RoutePlan;
+import com.here.android.mpa.routing.RouteResult;
+import com.here.android.mpa.routing.RouteWaypoint;
+import com.here.android.mpa.routing.Router;
+import com.here.android.mpa.routing.RoutingError;
+
+import java.util.List;
+
+class LocationHelper {
+
+    private LocationHelper() {
+    }
 
     static double distance(Location x, Location y) {
         return distance(x.getLatitude(), x.getLongitude(), y.getLatitude(), y.getLongitude());
@@ -41,6 +59,48 @@ public class LocationHelper {
             }
         }
         return (int) Math.ceil(speed);
+    }
+
+    /* Creates a route from 4350 Still Creek Dr to Langley BC with highways disallowed */
+    static void calculateRoute(Location start,
+                               Location end,
+                               Router.Listener<List<RouteResult>, RoutingError> routerListener) {
+        /* Initialize a CoreRouter */
+        CoreRouter coreRouter = new CoreRouter();
+
+        /* Initialize a RoutePlan */
+        RoutePlan routePlan = new RoutePlan();
+
+        /*
+         * Initialize a RouteOption.HERE SDK allow users to define their own parameters for the
+         * route calculation,including transport modes,route types and route restrictions etc.Please
+         * refer to API doc for full list of APIs
+         */
+        RouteOptions routeOptions = new RouteOptions();
+        /* Other transport modes are also available e.g Pedestrian */
+        routeOptions.setTransportMode(RouteOptions.TransportMode.CAR);
+        /* Disable highway in this route. */
+        routeOptions.setHighwaysAllowed(false);
+        /* Calculate the shortest route available. */
+        routeOptions.setRouteType(RouteOptions.Type.SHORTEST);
+        /* Calculate 1 route. */
+        routeOptions.setRouteCount(1);
+        /* Finally set the route option */
+        routePlan.setRouteOptions(routeOptions);
+
+        /* Define waypoints for the route */
+        /* START: 4350 Still Creek Dr */
+        RouteWaypoint startPoint = new RouteWaypoint(new GeoCoordinate(start.getLatitude(), start.getLongitude()));
+        /* END: Langley BC */
+        RouteWaypoint destination = new RouteWaypoint(new GeoCoordinate(end.getLatitude(), end.getLongitude()));
+
+        /* Add both waypoints to the route plan */
+        routePlan.addWaypoint(startPoint);
+        routePlan.addWaypoint(destination);
+
+        /* Trigger the route calculation,results will be called back via the listener */
+        coreRouter.calculateRoute(routePlan,
+                routerListener);
     }
 
 }
