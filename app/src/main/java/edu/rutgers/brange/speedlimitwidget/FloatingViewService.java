@@ -241,8 +241,24 @@ public class FloatingViewService extends Service {
                         }
                         return true;
                     case MotionEvent.ACTION_POINTER_UP:
+                        Coordinate c1 = new Coordinate(initialX, initialY);
+                        Coordinate c2 = new Coordinate(event.getRawX(), event.getRawY());
+                        Coordinate init;
+                        int pointerCount = event.getPointerCount();
+                        if (pointerCount > 1) {
+                            float posX = event.getX(1);
+                            float posY = event.getY(1);
+                            init = new Coordinate(posX, posY);
+                        } else {
+                            return false;
+                        }
                         float rawX = event.getRawX();
-                        float dragDiff = rawX - initialTouchX;
+                        float dragDiff = Math.abs(rawX - initialTouchX);
+                        if (isCloser(init, c1, c2)) {
+
+                        } else {
+                            dragDiff *= -1;
+                        }
                         int width = v.getWidth();
                         float resizeFactor = (width + dragDiff) / width;
                         resize(resizeFactor);
@@ -262,6 +278,34 @@ public class FloatingViewService extends Service {
 
         drivePath = new Path(10);
         startLocationUpdates();
+    }
+
+    private boolean isCloser(Coordinate init, Coordinate c1, Coordinate c2) {
+        return isCloser(init.getX(), init.getY(), c1.getX(), c1.getY(), c2.getX(), c2.getY());
+    }
+
+    private boolean isCloser(float xInit, float yInit, float x1, float y1, float x2, float y2) {
+        float distance1 = (float) Math.sqrt(Math.pow(xInit - x1, 2) + Math.pow(yInit - y1, 2));
+        float distance2 = (float) Math.sqrt(Math.pow(xInit - x2, 2) + Math.pow(yInit - y2, 2));
+        return distance1 < distance2;
+    }
+
+    public void updateFavoriteLocation(Tuple<Location, java.sql.Timestamp> currentLocation) {
+        final int TIME_IN_SECONDS = 30 * 60;
+        if (mostRecentFavorite == null) {
+            mostRecentFavorite = currentLocation;
+        } else if (LocationHelper.distance(mostRecentFavorite.x, currentLocation.x) < 50) {
+            long currentLocationTime = currentLocation.y.getTime();
+            long mostRecentLocationTime = mostRecentFavorite.y.getTime();
+            long diff = currentLocationTime - mostRecentLocationTime;
+            if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * TIME_IN_SECONDS && !favoriteAdded) {
+                MainActivity.upateFavorites("Custom Name", mostRecentFavorite.x, "");
+                favoriteAdded = true;
+            }
+        } else {
+            mostRecentFavorite = currentLocation;
+            favoriteAdded = false;
+        }
     }
 
     private void init(Context context) {
@@ -447,21 +491,21 @@ public class FloatingViewService extends Service {
         }
     }
 
-    public void updateFavoriteLocation(Tuple<Location, java.sql.Timestamp> currentLocation) {
-        final int TIME_IN_SECONDS = 15;
-        if (mostRecentFavorite == null) {
-            mostRecentFavorite = currentLocation;
-        } else if (LocationHelper.distance(mostRecentFavorite.x, currentLocation.x) < 50) {
-            long currentLocationTime = currentLocation.y.getTime();
-            long mostRecentLocationTime = mostRecentFavorite.y.getTime();
-            long diff = currentLocationTime - mostRecentLocationTime;
-            if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * TIME_IN_SECONDS && !favoriteAdded) {
-                MainActivity.upateFavorites("Custom Name", mostRecentFavorite.x, "");
-                favoriteAdded = true;
-            }
-        } else {
-            mostRecentFavorite = currentLocation;
-            favoriteAdded = false;
+    class Coordinate {
+        float x;
+        float y;
+
+        Coordinate(float x, float y) {
+            this.x = x;
+            this.y = y;
+        }
+
+        float getX() {
+            return x;
+        }
+
+        float getY() {
+            return y;
         }
     }
 
