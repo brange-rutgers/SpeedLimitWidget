@@ -17,13 +17,18 @@ import android.widget.Toast;
 import com.here.android.mpa.common.GeoBoundingBox;
 import com.here.android.mpa.mapping.Map;
 import com.here.android.mpa.mapping.MapRoute;
+import com.here.android.mpa.routing.Route;
 import com.here.android.mpa.routing.RouteResult;
+import com.here.android.mpa.routing.RouteTta;
 import com.here.android.mpa.routing.Router;
 import com.here.android.mpa.routing.RoutingError;
 
 import java.io.IOException;
+import java.sql.Date;
+import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Locale;
+import java.util.TimeZone;
 
 import static android.provider.BaseColumns._ID;
 
@@ -72,13 +77,42 @@ public class FavoritesCursorAdapter extends CursorAdapter {
                 if (routingError == RoutingError.NONE) {
                     if (routeResults.get(0).getRoute() != null) {
                         /* Create a MapRoute so that it can be placed on the map */
-                        MapRoute m_mapRoute = new MapRoute(routeResults.get(0).getRoute());
+                        Route route = routeResults.get(0).getRoute();
+                        MapRoute m_mapRoute = new MapRoute(route);
                         /*
                          * We may also want to make sure the map view is orientated properly
                          * so the entire route can be easily seen.
                          */
-                        GeoBoundingBox gbb = routeResults.get(0).getRoute()
+                        GeoBoundingBox gbb = route
                                 .getBoundingBox();
+                        RouteTta routeTta = route.getTtaExcludingTraffic(0);
+
+                        int timeInSeconds = routeTta.getDuration();//seconds
+                        int distanceInMeters = route.getLength();//meters
+
+                        String change;
+                        if (distanceInMeters == 0) {
+                            change = "0 minutes at 5mph over";
+                        } else {
+                            double deltaS = LocationHelper.milesPerHourToMetersPerSecond(5);
+                            double newTime = (timeInSeconds - distanceInMeters / (distanceInMeters - deltaS * timeInSeconds));
+                            newTime = timeInSeconds * (1 - distanceInMeters / (distanceInMeters + timeInSeconds * deltaS));
+
+                            TimeZone tz = TimeZone.getTimeZone("UTC");
+                            SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+                            df.setTimeZone(tz);
+                            String time = df.format(new Date((int) (newTime * 1000)));
+
+                            change = "-" + time + " at 5mph over";
+                        }
+
+                        TimeZone tz = TimeZone.getTimeZone("UTC");
+                        SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
+                        df.setTimeZone(tz);
+                        String time = df.format(new Date(timeInSeconds * 1000));
+
+                        change = time + ", (" + change + ")";
+                        minutesLeftView.setText(change);
                     } else {
                         // TODO Handle Error
                     }

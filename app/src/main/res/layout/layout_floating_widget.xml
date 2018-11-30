@@ -6,7 +6,7 @@
     android:layout_height="wrap_content">
 
     <!--Root container-->
-    <RelativeLayout
+    <edu.rutgers.brange.speedlimitwidget.ResizableLayout
         android:id="@+id/root_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -20,43 +20,10 @@
             android:orientation="vertical"
             android:visibility="visible">
 
-            <RelativeLayout
-                android:layout_width="60dp"
-                android:layout_height="60dp"
-                android:layout_marginTop="8dp">
-                <!--Icon of floating widget -->
-                <ImageView
-                    android:id="@+id/collapsed_iv"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/ic_speed_limit"
-                    tools:ignore="ContentDescription" />
-
-                <TextView
-                    android:id="@+id/currentSpeedLimitTextCollapsed"
-                    android:layout_width="wrap_content"
-                    android:layout_height="41dp"
-                    android:layout_alignBottom="@+id/collapsed_iv"
-                    android:layout_centerHorizontal="true"
-                    android:layout_gravity="end"
-                    android:layout_marginStart="20dip"
-                    android:layout_marginBottom="0dp"
-                    android:background="#07000000"
-                    android:gravity="center"
-                    android:padding="6dip"
-                    android:text="@string/navigation_speed_limit_default"
-                    android:textColor="@android:color/black"
-                    android:textSize="24dp" />
-            </RelativeLayout>
-
-            <!--Close button-->
-            <ImageView
-                android:id="@+id/close_btn"
-                android:layout_width="20dp"
-                android:layout_height="20dp"
-                android:layout_marginLeft="40dp"
-                android:src="@drawable/ic_close"
-                tools:ignore="ContentDescription" />
+            <edu.rutgers.brange.speedlimitwidget.SpeedLimitLayout
+                android:id="@+id/collapsed_view_speed_limit"
+                android:layout_width="@dimen/collapsed_view_width"
+                android:layout_height="@dimen/collapsed_view_height"></edu.rutgers.brange.speedlimitwidget.SpeedLimitLayout>
         </RelativeLayout>
 
         <!--View while view is expanded-->
@@ -66,77 +33,20 @@
             android:layout_height="wrap_content"
             android:background="@null"
             android:orientation="horizontal"
-            android:padding="8dp"
+            android:padding="@dimen/view_vertical_margin"
             android:visibility="gone">
 
-            <!--Album image for the song currently playing.-->
-            <RelativeLayout
-                android:layout_width="60dp"
-                android:layout_height="60dp"
-                android:layout_marginTop="8dp">
-                <!--Icon of floating widget -->
-                <ImageView
-                    android:id="@+id/expanded_iv"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:src="@drawable/ic_speed_limit"
-                    tools:ignore="ContentDescription" />
+            <edu.rutgers.brange.speedlimitwidget.SpeedLimitLayout
+                android:id="@+id/expanded_view_speed_limit"
+                android:layout_width="@dimen/collapsed_view_width"
+                android:layout_height="@dimen/collapsed_view_height"></edu.rutgers.brange.speedlimitwidget.SpeedLimitLayout>
 
-                <TextView
-                    android:id="@+id/currentSpeedLimitTextExpanded"
-                    android:layout_width="wrap_content"
-                    android:layout_height="41dp"
-                    android:layout_alignBottom="@+id/expanded_iv"
-                    android:layout_centerHorizontal="true"
-                    android:layout_gravity="end"
-                    android:layout_marginStart="20dip"
-                    android:layout_marginBottom="0dp"
-                    android:background="#07000000"
-                    android:gravity="center"
-                    android:padding="6dip"
-                    android:text="@string/navigation_speed_limit_default"
-                    android:textColor="@android:color/black"
-                    android:textSize="24dp" />
-            </RelativeLayout>
-
-
-            <!--Previous button-->
-            <ImageView
-                android:id="@+id/prev_btn"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_gravity="center_vertical"
-                android:layout_marginLeft="20dp"
-                android:src="@mipmap/ic_previous"
-                tools:ignore="ContentDescription" />
-
-            <!--Play button-->
-            <!--
-            <ImageView
-                android:id="@+id/play_btn"
-                android:layout_width="50dp"
-                android:layout_height="50dp"
-                android:layout_gravity="center_vertical"
-                android:layout_marginLeft="10dp"
-                android:src="@drawable/ic_speedometer"
-                tools:ignore="ContentDescription" />
-            -->
             <edu.rutgers.brange.speedlimitwidget.SpeedometerView
                 android:id="@+id/speedometer"
-                android:layout_height="50dp"
-                android:layout_width="50dp"
+                android:layout_width="@dimen/speedometer_size"
+                android:layout_height="@dimen/speedometer_size"
                 android:layout_gravity="center_vertical"
-                android:layout_marginLeft="10dp"
-                tools:ignore="ContentDescription"/>
-
-            <!--Next button-->
-            <ImageView
-                android:id="@+id/next_btn"
-                android:layout_width="0dp"
-                android:layout_height="0dp"
-                android:layout_gravity="center_vertical"
-                android:layout_marginLeft="10dp"
-                android:src="@mipmap/ic_play_next"
+                android:layout_marginLeft="@dimen/speedometer_margin"
                 tools:ignore="ContentDescription" />
 
             <RelativeLayout
@@ -145,18 +55,18 @@
                 android:orientation="vertical">
 
                 <ImageView
-                    android:id="@+id/close_button"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:id="@+id/close_btn_expanded"
+                    android:layout_width="@dimen/button_size"
+                    android:layout_height="@dimen/button_size"
                     android:src="@drawable/ic_close" />
 
                 <ImageView
                     android:id="@+id/open_button"
-                    android:layout_width="20dp"
-                    android:layout_height="20dp"
+                    android:layout_width="@dimen/button_size"
+                    android:layout_height="@dimen/button_size"
                     android:layout_alignParentBottom="true"
                     android:src="@drawable/ic_open" />
             </RelativeLayout>
         </LinearLayout>
-    </RelativeLayout>
+    </edu.rutgers.brange.speedlimitwidget.ResizableLayout>
 </FrameLayout>

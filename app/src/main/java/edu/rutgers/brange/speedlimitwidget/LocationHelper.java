@@ -40,6 +40,18 @@ class LocationHelper {
         return d;
     }
 
+    static double metersToMiles(double meters) {
+        return meters * 0.62137119 / 1000;
+    }
+
+    static double milesToMeters(double miles) {
+        return miles / 1609.344;
+    }
+
+    static double milesPerHourToMetersPerSecond(double speed) {
+        return milesToMeters(speed) * 3600;
+    }
+
     static double meterPerSecToKmPerHour(double speed) {
         return (speed * 3.6);
     }

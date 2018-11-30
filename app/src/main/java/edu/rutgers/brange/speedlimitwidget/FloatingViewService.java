@@ -16,12 +16,16 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Looper;
 import android.support.annotation.NonNull;
+import android.support.constraint.ConstraintLayout;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
+import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
 import android.widget.TextView;
@@ -63,6 +67,7 @@ public class FloatingViewService extends Service {
 
     private WindowManager mWindowManager;
     private View mFloatingView;
+    private ResizableLayout mResizableLayout;
 
     static Path drivePath;
     MapEngine mapEngine;
@@ -75,28 +80,18 @@ public class FloatingViewService extends Service {
     private long UPDATE_INTERVAL = 10 * 1000;  /* 10 secs */
     private long FASTEST_INTERVAL = 2000; /* 2 sec */
     PositioningManager.OnPositionChangedListener positionListener;
+
+    private ScaleGestureDetector mScaleDetector;
+    private float mScaleFactor = 1.f;
+    private SpeedLimitLayout speedLimitViewCollapsed;
+    private SpeedLimitLayout speedLimitViewExpanded;
     private SpeedometerView speedometerView;
+    private TextView speedLimitTextViewCollapsed;
     private TextView speedLimitTextViewExpanded;
+    private ImageView closeButtonCollapsed;
 
     public FloatingViewService() {
     }
-
-    @Override
-    public IBinder onBind(Intent intent) {
-        return null;
-    }
-
-    private TextView getSpeedLimitTextViewCollapsed;
-
-    /**
-     * Detect if the floating view is collapsed or expanded.
-     *
-     * @return true if the floating view is collapsed.
-     */
-    private boolean isViewCollapsed() {
-        return mFloatingView == null || mFloatingView.findViewById(R.id.collapse_view).getVisibility() == View.VISIBLE;
-    }
-
     private boolean fetchingDataInProgress = false;
 
     private static double getSpeed(Location location0, java.sql.Timestamp timestamp0, Location location1, java.sql.Timestamp timestamp1) {
@@ -109,10 +104,19 @@ public class FloatingViewService extends Service {
     public void onCreate() {
         super.onCreate();
         //Inflate the floating view layout we created
-        mFloatingView = LayoutInflater.from(this).inflate(R.layout.layout_floating_widget, null);
+        LayoutInflater layoutInflater = LayoutInflater.from(this);
+        mFloatingView = layoutInflater.inflate(R.layout.layout_floating_widget, null);
         speedometerView = mFloatingView.findViewById(R.id.speedometer);
-        speedLimitTextViewExpanded = mFloatingView.findViewById(R.id.currentSpeedLimitTextExpanded);
-        getSpeedLimitTextViewCollapsed = mFloatingView.findViewById(R.id.currentSpeedLimitTextCollapsed);
+        speedLimitViewCollapsed = mFloatingView.findViewById(R.id.collapsed_view_speed_limit);
+        speedLimitViewExpanded = mFloatingView.findViewById(R.id.expanded_view_speed_limit);
+        ImageView closeButtonExpanded = speedLimitViewExpanded.findViewById(R.id.close_btn);
+        closeButtonExpanded.setVisibility(View.GONE);
+        speedLimitTextViewExpanded = speedLimitViewExpanded.findViewById(R.id.speed_limit_text);
+        speedLimitTextViewCollapsed = speedLimitViewCollapsed.findViewById(R.id.speed_limit_text);
+        closeButtonCollapsed = speedLimitViewCollapsed.findViewById(R.id.close_btn);
+
+        init(this);
+        resize(2.f);
 
         //Add the view to the window.
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
@@ -138,7 +142,7 @@ public class FloatingViewService extends Service {
 
 
         //Set the close button
-        ImageView closeButtonCollapsed = (ImageView) mFloatingView.findViewById(R.id.close_btn);
+        ImageView closeButtonCollapsed = speedLimitViewCollapsed.findViewById(R.id.close_btn);
         closeButtonCollapsed.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -146,18 +150,6 @@ public class FloatingViewService extends Service {
                 stopSelf();
             }
         });
-
-        /*
-        //Set the view while floating view is expanded.
-        //Set the play button.
-        ImageView playButton = (ImageView) mFloatingView.findViewById(R.id.play_btn);
-        playButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Toast.makeText(FloatingViewService.this, "Playing the song.", Toast.LENGTH_LONG).show();
-            }
-        });
-        */
 
         // Add label converter
         speedometerView.setLabelConverter(new SpeedometerView.LabelConverter() {
@@ -178,27 +170,8 @@ public class FloatingViewService extends Service {
         speedometerView.addColoredRange(45, 60, Color.YELLOW);
         speedometerView.addColoredRange(60, 400, Color.RED);
 
-
-        //Set the next button.
-        ImageView nextButton = (ImageView) mFloatingView.findViewById(R.id.next_btn);
-        nextButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Toast.makeText(FloatingViewService.this, "Playing next song.", Toast.LENGTH_LONG).show();
-            }
-        });
-
-        //Set the pause button.
-        ImageView prevButton = (ImageView) mFloatingView.findViewById(R.id.prev_btn);
-        prevButton.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                Toast.makeText(FloatingViewService.this, "Playing previous song.", Toast.LENGTH_LONG).show();
-            }
-        });
-
         //Set the close button
-        ImageView closeButton = (ImageView) mFloatingView.findViewById(R.id.close_button);
+        ImageView closeButton = (ImageView) mFloatingView.findViewById(R.id.close_btn_expanded);
         closeButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -224,7 +197,8 @@ public class FloatingViewService extends Service {
         });
 
         //Drag and move floating view using user's touch action.
-        mFloatingView.findViewById(R.id.root_container).setOnTouchListener(new View.OnTouchListener() {
+        mResizableLayout = mFloatingView.findViewById(R.id.root_container);
+        mResizableLayout.setOnTouchListener(new View.OnTouchListener() {
             private int initialX;
             private int initialY;
             private float initialTouchX;
@@ -248,6 +222,8 @@ public class FloatingViewService extends Service {
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
                         return true;
+                    case MotionEvent.ACTION_POINTER_DOWN:
+                        return false;
                     case MotionEvent.ACTION_UP:
                         int Xdiff = (int) (event.getRawX() - initialTouchX);
                         int Ydiff = (int) (event.getRawY() - initialTouchY);
@@ -263,6 +239,13 @@ public class FloatingViewService extends Service {
                                 expandedView.setVisibility(View.VISIBLE);
                             }
                         }
+                        return true;
+                    case MotionEvent.ACTION_POINTER_UP:
+                        float rawX = event.getRawX();
+                        float dragDiff = rawX - initialTouchX;
+                        int width = v.getWidth();
+                        float resizeFactor = (width + dragDiff) / width;
+                        resize(resizeFactor);
                         return true;
                     case MotionEvent.ACTION_MOVE:
                         //Calculate the X and Y coordinates of the view.
@@ -281,12 +264,80 @@ public class FloatingViewService extends Service {
         startLocationUpdates();
     }
 
+    private void init(Context context) {
+        mScaleDetector = new ScaleGestureDetector(context, new ScaleListener());
+    }
+
     @Override
     public void onDestroy() {
         super.onDestroy();
         if (mFloatingView != null) mWindowManager.removeView(mFloatingView);
         stopLocationUpdates();
         stopManagersAndListeners();
+    }
+
+    private void resize(float resizeFactor) {
+
+        final float ratio = 60.f / 40;
+
+        if (true) {
+            // Resize collapsed Speed Limit
+            ViewGroup.LayoutParams speedLimitViewCollapsedLayoutParams = speedLimitViewCollapsed.getLayoutParams();
+            speedLimitViewCollapsedLayoutParams.height *= resizeFactor;
+            speedLimitViewCollapsedLayoutParams.width *= resizeFactor;
+            speedLimitViewCollapsed.setLayoutParams(speedLimitViewCollapsedLayoutParams);
+
+            // Resize expanded Speed Limit
+            ViewGroup.LayoutParams speedLimitViewExpandedLayoutParams = speedLimitViewExpanded.getLayoutParams();
+            speedLimitViewExpandedLayoutParams.height *= resizeFactor;
+            speedLimitViewExpandedLayoutParams.width *= resizeFactor;
+            speedLimitViewExpanded.setLayoutParams(speedLimitViewExpandedLayoutParams);
+
+            // Resize Speedometer
+            ViewGroup.LayoutParams speedometerViewLayoutParams = speedometerView.getLayoutParams();
+            speedometerViewLayoutParams.height *= resizeFactor;
+            speedometerViewLayoutParams.width *= resizeFactor;
+            speedometerView.setLayoutParams(speedometerViewLayoutParams);
+
+            ConstraintLayout.LayoutParams closeButtonCollapsedLayoutParams = (ConstraintLayout.LayoutParams) closeButtonCollapsed.getLayoutParams();
+            closeButtonCollapsedLayoutParams.setMargins(
+                    (int) (closeButtonCollapsedLayoutParams.leftMargin * resizeFactor),
+                    closeButtonCollapsedLayoutParams.topMargin,
+                    closeButtonCollapsedLayoutParams.rightMargin,
+                    closeButtonCollapsedLayoutParams.bottomMargin);
+            closeButtonCollapsed.setLayoutParams(closeButtonCollapsedLayoutParams);
+
+            // Resize and Move TextView
+            float textSizeComplexUnitPx = speedLimitTextViewCollapsed.getTextSize();
+            speedLimitTextViewCollapsed.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+            speedLimitTextViewExpanded.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+        }
+    }
+
+    @Override
+    public IBinder onBind(Intent intent) {
+        return null;
+    }
+
+    /**
+     * Detect if the floating view is collapsed or expanded.
+     *
+     * @return true if the floating view is collapsed.
+     */
+    private boolean isViewCollapsed() {
+        return mFloatingView == null || mFloatingView.findViewById(R.id.collapse_view).getVisibility() == View.VISIBLE;
+    }
+
+    private void onLocationChanged(@NonNull Location location) {
+
+        String msg = "New Location Update: " + location.getLatitude() + "," + location.getLongitude();
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
+
+
+        Tuple<Location, java.sql.Timestamp> currentLocation = new Tuple(location, new java.sql.Timestamp(System.currentTimeMillis()));
+        updateFavoriteLocation(currentLocation);
+        drivePath.push(currentLocation);
+        updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(location.getSpeed()), 0);
     }
 
     private void stopLocationUpdates() {
@@ -396,24 +447,15 @@ public class FloatingViewService extends Service {
         }
     }
 
-    private void onLocationChanged(@NonNull Location location) {
-        /*
-        String msg = "New Location Update: " + location.getLatitude() + "," + location.getLongitude();
-        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show();
-        */
-
-        Tuple<Location, java.sql.Timestamp> currentLocation = new Tuple(location, new java.sql.Timestamp(calendar.getTime().getTime()));
-        drivePath.push(currentLocation);
-        updateFavoriteLocation(currentLocation);
-        int maxLocations = drivePath.getMaxLocations();
-        updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(location.getSpeed()), 0);
-    }
-
     public void updateFavoriteLocation(Tuple<Location, java.sql.Timestamp> currentLocation) {
+        final int TIME_IN_SECONDS = 15;
         if (mostRecentFavorite == null) {
             mostRecentFavorite = currentLocation;
         } else if (LocationHelper.distance(mostRecentFavorite.x, currentLocation.x) < 50) {
-            if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * 3600 && !favoriteAdded) {
+            long currentLocationTime = currentLocation.y.getTime();
+            long mostRecentLocationTime = mostRecentFavorite.y.getTime();
+            long diff = currentLocationTime - mostRecentLocationTime;
+            if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * TIME_IN_SECONDS && !favoriteAdded) {
                 MainActivity.upateFavorites("Custom Name", mostRecentFavorite.x, "");
                 favoriteAdded = true;
             }
@@ -421,6 +463,19 @@ public class FloatingViewService extends Service {
             mostRecentFavorite = currentLocation;
             favoriteAdded = false;
         }
+    }
+
+    private void startNavigationManager() {
+        navigationManager = NavigationManager.getInstance();
+        NavigationManager.Error navError = navigationManager.startTracking();
+
+        if (navError == NavigationManager.Error.NONE) {
+            Toast.makeText(this, "NavigationManager started", Toast.LENGTH_LONG).show();
+        } else {
+            //handle error navError.toString());
+            Toast.makeText(this, "NavigationManager not started", Toast.LENGTH_LONG).show();
+        }
+
     }
 
     public void getLastLocation(OnSuccessListener<Location> onSuccessListener) {
@@ -505,16 +560,22 @@ public class FloatingViewService extends Service {
         positioningManager.stop();
     }
 
-    private void startNavigationManager() {
-        navigationManager = NavigationManager.getInstance();
-        NavigationManager.Error navError = navigationManager.startTracking();
+    private void updateCurrentSpeedLimitView(int currentSpeedLimit) {
 
-        if (navError == NavigationManager.Error.NONE) {
+        String currentSpeedLimitText;
+
+        if (currentSpeedLimit > 0) {
+            currentSpeedLimitText = String.valueOf(currentSpeedLimit);
+            resetColoredRanges(currentSpeedLimit);
         } else {
-            //handle error navError.toString());
-            Toast.makeText(this, "NavigationManager not started", Toast.LENGTH_LONG).show();
+            currentSpeedLimitText = getResources().getString(R.string.navigation_speed_limit_default);
         }
+        //currentSpeedLimitView.setText(currentSpeedLimitText);
+        //currentSpeedLimitView.setTextColor(getResources().getColor(textColorId));
+        //currentSpeedLimitView.setBackgroundResource(backgroundImageId);
 
+        speedLimitTextViewCollapsed.setText(currentSpeedLimitText);
+        speedLimitTextViewExpanded.setText(currentSpeedLimitText);
     }
 
     private void stopNavigationManager() {
@@ -551,22 +612,18 @@ public class FloatingViewService extends Service {
         speedometerView.addColoredRange(speedLimit, 400, Color.RED);
     }
 
-    private void updateCurrentSpeedLimitView(int currentSpeedLimit) {
+    private class ScaleListener
+            extends ScaleGestureDetector.SimpleOnScaleGestureListener {
+        @Override
+        public boolean onScale(ScaleGestureDetector detector) {
+            mScaleFactor *= detector.getScaleFactor();
 
-        String currentSpeedLimitText;
+            // Don't let the object get too small or too large.
+            mScaleFactor = Math.max(0.1f, Math.min(mScaleFactor, 5.0f));
 
-        if (currentSpeedLimit > 0) {
-            currentSpeedLimitText = String.valueOf(currentSpeedLimit);
-            resetColoredRanges(currentSpeedLimit);
-        } else {
-            currentSpeedLimitText = getResources().getString(R.string.navigation_speed_limit_default);
+            mFloatingView.invalidate();
+            return true;
         }
-        //currentSpeedLimitView.setText(currentSpeedLimitText);
-        //currentSpeedLimitView.setTextColor(getResources().getColor(textColorId));
-        //currentSpeedLimitView.setBackgroundResource(backgroundImageId);
-
-        getSpeedLimitTextViewCollapsed.setText(currentSpeedLimitText);
-        speedLimitTextViewExpanded.setText(currentSpeedLimitText);
     }
 
     class Tuple<X, Y> {

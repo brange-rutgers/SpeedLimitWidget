@@ -18,12 +18,14 @@ import android.view.View;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import static android.provider.BaseColumns._ID;
+
 public class MainActivity extends AppCompatActivity {
     /**
      * code to post/handler request for permission
      */
     private final static int REQUEST_CODE_ASK_PERMISSIONS = 1;
-    private static final int CODE_DRAW_OVER_OTHER_APP_PERMISSION = -1010101;
+    private static final int CODE_DRAW_OVER_OTHER_APP_PERMISSION = 2;
 
     static final String START_ACTIVITY_WITH_VIEW = "START_ACTIVITY_WITH_VIEW";
     private static final boolean START_WITHOUT_VIEW = true;
@@ -121,6 +123,24 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    public static boolean queryFavorite(Location location, int distanceInMeters) {
+        String query = "SELECT * " +
+                " FROM " + FavoritePlacesContract.ContractEntry.TABLE_NAME +
+                " WHERE " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                " * " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                " + " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                " * " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                " < " + distanceInMeters * distanceInMeters;
+
+        Cursor cursor = db.rawQuery(query, null);
+        int count = cursor.getCount();
+        return count > 0;
+    }
+
     public static void upateFavorites(String customName, Location location, String address) {
         ContentValues cv;
         cv = new ContentValues();
@@ -130,16 +150,8 @@ public class MainActivity extends AppCompatActivity {
         cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_ADDRESS, address);
         long id;
         String whereClause = FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + "=? AND " + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + "=?";
-        id = db.update(
-                FavoritePlacesContract.ContractEntry.TABLE_NAME,
-                cv,
-                whereClause,
-                new String[]
-                        {
-                                location.getLatitude() + "",
-                                location.getLongitude() + ""
-                        });
-        if (id == 0) {
+
+        if (!queryFavorite(location, 50)) {
             id = db.insert(FavoritePlacesContract.ContractEntry.TABLE_NAME, null, cv);
         }
     }

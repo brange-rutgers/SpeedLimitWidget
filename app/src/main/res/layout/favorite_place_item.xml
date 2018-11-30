@@ -15,7 +15,6 @@
         android:hint="@string/custom_favorite_name_default"
         android:inputType="text"
         android:textSize="20sp"
-        app:layout_constraintBottom_toBottomOf="@+id/barrier"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toLeftOf="@+id/guideline_vertical" />
 
@@ -29,10 +28,8 @@
         android:layout_marginBottom="@dimen/view_vertical_margin"
         android:hint="@string/unknown_address"
         android:textSize="20sp"
-        app:layout_constraintBottom_toBottomOf="@+id/barrier"
         app:layout_constraintLeft_toLeftOf="@+id/guideline_vertical"
-        app:layout_constraintRight_toLeftOf="@id/guideline_vertical2"
-        app:layout_constraintTop_toTopOf="@id/custom_name" />
+        app:layout_constraintRight_toLeftOf="@id/guideline_vertical2" />
 
     <TextView
         android:id="@+id/minutes_to_go"
