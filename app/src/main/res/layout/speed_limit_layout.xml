@@ -10,7 +10,7 @@
         android:id="@+id/speed_limit_image"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:src="@drawable/ic_speed_limit"
+        android:src="@drawable/speed_limit_blank_sign"
         tools:ignore="ContentDescription" />
 
     <TextView
@@ -19,26 +19,12 @@
         android:layout_height="0dp"
         android:gravity="center"
         android:text="@string/navigation_speed_limit_default"
+        android:textStyle="bold"
         android:textColor="@android:color/black"
         app:layout_constraintBottom_toTopOf="@+id/guideline_bottom"
         app:layout_constraintLeft_toRightOf="@+id/guideline_left"
         app:layout_constraintRight_toLeftOf="@+id/guideline_right"
         app:layout_constraintTop_toBottomOf="@+id/guideline_top" />
-
-    <!--Close button-->
-    <ImageView
-        android:id="@+id/close_btn"
-        android:layout_width="0dp"
-        android:layout_height="0dp"
-        android:src="@drawable/ic_close"
-        app:layout_constraintBottom_toBottomOf="@+id/guideline_button_bottom"
-        app:layout_constraintBottom_toTopOf="@+id/guideline_button_bottom"
-        app:layout_constraintDimensionRatio="1:1"
-        app:layout_constraintRight_toLeftOf="@id/guideline_button_left"
-        app:layout_constraintRight_toRightOf="@+id/guideline_button_left"
-        app:layout_constraintStart_toStartOf="@+id/guideline_right"
-        app:layout_constraintTop_toTopOf="parent"
-        tools:ignore="ContentDescription" />
 
     <android.support.constraint.Guideline
         android:id="@+id/guideline_left"
@@ -59,27 +45,13 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        app:layout_constraintGuide_percent="0.45" />
+        app:layout_constraintGuide_percent="0.50" />
 
     <android.support.constraint.Guideline
         android:id="@+id/guideline_bottom"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        app:layout_constraintGuide_percent="0.90" />
-
-    <android.support.constraint.Guideline
-        android:id="@+id/guideline_button_bottom"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        app:layout_constraintGuide_percent="0.15" />
-
-    <android.support.constraint.Guideline
-        android:id="@+id/guideline_button_left"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.85" />
+        app:layout_constraintGuide_percent="0.95" />
 
 </android.support.constraint.ConstraintLayout>

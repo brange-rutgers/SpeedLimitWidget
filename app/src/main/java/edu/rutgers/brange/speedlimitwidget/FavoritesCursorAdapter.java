@@ -1,21 +1,23 @@
 package edu.rutgers.brange.speedlimitwidget;
 
+import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.location.Address;
 import android.location.Geocoder;
 import android.location.Location;
-import android.location.LocationProvider;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.BaseAdapter;
 import android.widget.CursorAdapter;
 import android.widget.EditText;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.here.android.mpa.common.GeoBoundingBox;
-import com.here.android.mpa.mapping.Map;
+import com.here.android.mpa.common.GeoCoordinate;
 import com.here.android.mpa.mapping.MapRoute;
 import com.here.android.mpa.routing.Route;
 import com.here.android.mpa.routing.RouteResult;
@@ -29,10 +31,16 @@ import java.text.SimpleDateFormat;
 import java.util.List;
 import java.util.Locale;
 import java.util.TimeZone;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static android.provider.BaseColumns._ID;
 
 public class FavoritesCursorAdapter extends CursorAdapter {
+    String id;
+    ReentrantLock lock = new ReentrantLock();
+    boolean routeCalculated;
+    boolean addressTextSet;
+
     public FavoritesCursorAdapter(Context context, Cursor cursor) {
         super(context, cursor, 0);
     }
@@ -47,13 +55,15 @@ public class FavoritesCursorAdapter extends CursorAdapter {
     // The bindView method is used to bind all data to a given view
     // such as setting the text on a TextView.
     @Override
-    public void bindView(View view, Context context, Cursor cursor) {
-        EditText customNameView = view.findViewById(R.id.custom_name);
-        EditText addressView = view.findViewById(R.id.address);
+    public void bindView(View view, final Context context, Cursor cursor) {
+        id = cursor.getString(cursor.getColumnIndexOrThrow(_ID));
+
+        final Context mContext = context;
+        final EditText addressView = view.findViewById(R.id.address);
         final TextView minutesLeftView = view.findViewById(R.id.minutes_to_go);
 
         //int id = Integer.parseInt(cursor.getString(cursor.getColumnIndexOrThrow(_ID)));
-        String customNameString = cursor.getString(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME));
+        final String customNameString = cursor.getString(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME));
         String addressString = cursor.getString(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_ADDRESS));
         double latitude = cursor.getDouble(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE));
         double longitude = cursor.getDouble(cursor.getColumnIndexOrThrow(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE));
@@ -67,11 +77,23 @@ public class FavoritesCursorAdapter extends CursorAdapter {
             @Override
             public void onProgress(int i) {
                 /* The calculation progress can be retrieved in this callback. */
+                if (i == 100) {
+
+                } else {
+                    if (lock.tryLock()) {
+                        try {
+                            minutesLeftView.setText(String.format("%3d%% Complete", i));
+                        } finally {
+                            lock.unlock();
+                        }
+                    }
+                }
             }
 
             @Override
             public void onCalculateRouteFinished(List<RouteResult> routeResults,
                                                  RoutingError routingError) {
+                routeCalculated = true;
                 // TODO Get route time
                 /* Calculation is done. Let's handle the result */
                 if (routingError == RoutingError.NONE) {
@@ -118,37 +140,81 @@ public class FavoritesCursorAdapter extends CursorAdapter {
                     }
                 } else {
                     // TODO Handle Error
+                    minutesLeftView.setText(mContext.getString(R.string.error_no_route));
                 }
             }
         };
 
-        if (FloatingViewService.drivePath != null && FloatingViewService.drivePath.size() > 0) {
-            int size = FloatingViewService.drivePath.size();
-            LocationHelper.calculateRoute(FloatingViewService.drivePath.get(size - 1).x, location, listener);
+
+        if (FloatingViewService.lastPostion != null &&
+                !routeCalculated) {
+            GeoCoordinate g = new GeoCoordinate(0, 0);
+            g.setLatitude(latitude);
+            g.setLongitude(longitude);
+            LocationHelper.calculateRoute(FloatingViewService.lastPostion.x, g, listener);
         }
 
-
-        customNameView.setText(customNameString);
-
-        if (addressString.equals("")) {
-            Geocoder geocoder = new Geocoder(context, Locale.getDefault());
-            try {
-                List<Address> addresses = geocoder.getFromLocation(
-                        latitude,
-                        longitude,
-                        // In this sample, get just a single address.
-                        1);
-                if (addresses.size() > 0) {
-                    Address address = addresses.get(0);
-                    addressView.setText(address.getAddressLine(0));
-                }
-            } catch (IOException ioException) {
-            } catch (IllegalArgumentException illegalArgumentException) {
-            }
-
+        if (!customNameString.equals("") && !addressTextSet) {
+            addressView.setText(customNameString);
         } else {
-            addressView.setText(addressString);
+        }
+        addressTextSet = true;
+        try {
+            Geocoder geocoder = new Geocoder(context, Locale.getDefault());
+            List<Address> addresses = geocoder.getFromLocation(
+                    latitude,
+                    longitude,
+                    // In this sample, get just a single address.
+                    1);
+            if (addresses.size() > 0) {
+                Address address = addresses.get(0);
+                addressView.setHint(address.getAddressLine(0));
+            }
+        } catch (IOException ioException) {
+        } catch (IllegalArgumentException illegalArgumentException) {
         }
 
+        if (false) {
+            addressView.setOnFocusChangeListener(new View.OnFocusChangeListener() {
+                @Override
+                public void onFocusChange(View v, boolean hasFocus) {
+                    if (!hasFocus) {
+                        updateCustomName(context, (EditText) v);
+                    }
+                }
+            });
+        } else {
+            addressView.addTextChangedListener(new TextWatcher() {
+                @Override
+                public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+
+                }
+
+                @Override
+                public void onTextChanged(CharSequence s, int start, int before, int count) {
+                    updateCustomName(context, addressView);
+                }
+
+                @Override
+                public void afterTextChanged(Editable s) {
+
+                }
+            });
+        }
+
+    }
+
+    void updateCustomName(Context context, EditText v) {
+        lock.lock();
+        try {
+            ContentValues cv = new ContentValues();
+            String customName = v.getText().toString();
+            cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME, customName);
+            long i = MainActivity.db.update(FavoritePlacesContract.ContractEntry.TABLE_NAME, cv, _ID + "=" + id, null);
+            MainActivity.initDbs(context);
+            ((BaseAdapter) MainActivity.favorites.getAdapter()).notifyDataSetChanged();
+        } finally {
+            lock.unlock();
+        }
     }
 }

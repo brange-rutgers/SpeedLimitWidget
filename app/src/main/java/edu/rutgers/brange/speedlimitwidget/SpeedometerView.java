@@ -417,9 +417,6 @@ public class SpeedometerView extends View {
         float left = oval.centerX() - oval.width()*1.1f/scale;
         float top = oval.centerY()-oval.width()*1.1f/scale;
 
-        left = 0;
-        top = 0;
-        //canvas.drawBitmap(mask, left, top, maskPaint);
     }
 
     @SuppressWarnings("NewApi")
@@ -460,7 +457,7 @@ public class SpeedometerView extends View {
         needlePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         needlePaint.setStrokeWidth(5);
         needlePaint.setStyle(Paint.Style.STROKE);
-        needlePaint.setColor(Color.argb(200, 255, 0, 0));
+        needlePaint.setColor(Color.argb(200, 255, 255, 255));
     }
 
 

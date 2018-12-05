@@ -26,6 +26,10 @@ class LocationHelper {
         return distance(x.getLatitude(), x.getLongitude(), y.getLatitude(), y.getLongitude());
     }
 
+    static double distance(GeoCoordinate x, GeoCoordinate y) {
+        return distance(x.getLatitude(), x.getLongitude(), y.getLatitude(), y.getLongitude());
+    }
+
     private static double distance(double lat1, double lon1, double lat2, double lon2) {
         double R = 6371;
         double dLat = Math.toRadians(lat2 - lat1);
@@ -73,9 +77,49 @@ class LocationHelper {
         return (int) Math.ceil(speed);
     }
 
-    /* Creates a route from 4350 Still Creek Dr to Langley BC with highways disallowed */
     static void calculateRoute(Location start,
                                Location end,
+                               Router.Listener<List<RouteResult>, RoutingError> routerListener) {
+        /* Initialize a CoreRouter */
+        CoreRouter coreRouter = new CoreRouter();
+
+        /* Initialize a RoutePlan */
+        RoutePlan routePlan = new RoutePlan();
+
+        /*
+         * Initialize a RouteOption.HERE SDK allow users to define their own parameters for the
+         * route calculation,including transport modes,route types and route restrictions etc.Please
+         * refer to API doc for full list of APIs
+         */
+        RouteOptions routeOptions = new RouteOptions();
+        /* Other transport modes are also available e.g Pedestrian */
+        routeOptions.setTransportMode(RouteOptions.TransportMode.CAR);
+        /* Disable highway in this route. */
+        routeOptions.setHighwaysAllowed(false);
+        /* Calculate the shortest route available. */
+        routeOptions.setRouteType(RouteOptions.Type.SHORTEST);
+        /* Calculate 1 route. */
+        routeOptions.setRouteCount(1);
+        /* Finally set the route option */
+        routePlan.setRouteOptions(routeOptions);
+
+        /* Define waypoints for the route */
+        /* START: 4350 Still Creek Dr */
+        RouteWaypoint startPoint = new RouteWaypoint(new GeoCoordinate(start.getLatitude(), start.getLongitude()));
+        /* END: Langley BC */
+        RouteWaypoint destination = new RouteWaypoint(new GeoCoordinate(end.getLatitude(), end.getLongitude()));
+
+        /* Add both waypoints to the route plan */
+        routePlan.addWaypoint(startPoint);
+        routePlan.addWaypoint(destination);
+
+        /* Trigger the route calculation,results will be called back via the listener */
+        coreRouter.calculateRoute(routePlan,
+                routerListener);
+    }
+
+    static void calculateRoute(GeoCoordinate start,
+                               GeoCoordinate end,
                                Router.Listener<List<RouteResult>, RoutingError> routerListener) {
         /* Initialize a CoreRouter */
         CoreRouter coreRouter = new CoreRouter();

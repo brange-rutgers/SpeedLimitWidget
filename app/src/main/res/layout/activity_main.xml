@@ -13,20 +13,35 @@
     <ListView
         android:id="@+id/favorites"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:layout_constraintBottom_toTopOf="@id/guideline_horizontal"
-        app:layout_constraintTop_toTopOf="parent"></ListView>
+        android:layout_height="0dp"
+        app:layout_constraintBottom_toTopOf="@id/guideline_horizontal2"
+        app:layout_constraintTop_toBottomOf="@id/guideline_horizontal" />
 
     <Button
-        android:id="@+id/notify_me"
+        android:id="@+id/show_widget_btn"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
         android:layout_centerInParent="true"
         android:text="@string/start_widget_button_text"
-        app:layout_constraintTop_toTopOf="@+id/guideline_horizontal" />
+        app:layout_constraintBottom_toTopOf="@+id/guideline_horizontal" />
+
+    <Button
+        android:id="@+id/close_app_btn"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_centerInParent="true"
+        android:text="@string/close_app_button_text"
+        app:layout_constraintTop_toBottomOf="@id/guideline_horizontal2" />
 
     <android.support.constraint.Guideline
         android:id="@+id/guideline_horizontal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.1" />
+
+    <android.support.constraint.Guideline
+        android:id="@+id/guideline_horizontal2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"

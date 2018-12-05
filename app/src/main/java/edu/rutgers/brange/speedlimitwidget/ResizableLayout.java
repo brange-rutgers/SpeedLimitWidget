@@ -41,6 +41,16 @@ public class ResizableLayout extends RelativeLayout {
         canvas.restore();
     }
 
+    @Override
+    public boolean performClick() {
+        return super.performClick();
+    }
+
+    @Override
+    public boolean performLongClick() {
+        return super.performLongClick();
+    }
+
     private void init(Context context) {
         mScaleDetector = new ScaleGestureDetector(context, new ScaleListener());
         this.setWillNotDraw(false);

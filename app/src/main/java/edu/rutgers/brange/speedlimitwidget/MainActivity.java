@@ -15,8 +15,12 @@ import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.view.View;
+import android.widget.AdapterView;
+import android.widget.CursorAdapter;
 import android.widget.ListView;
 import android.widget.Toast;
+
+import com.here.android.mpa.common.GeoCoordinate;
 
 import static android.provider.BaseColumns._ID;
 
@@ -34,23 +38,14 @@ public class MainActivity extends AppCompatActivity {
     public static SpeedLimitWidgetDbHelper dbHelper;
     public static FavoritesCursorAdapter adapterFavorites;
 
-    ListView favorites;
+    static ListView favorites;
+    static long numSamples;
+    static double averageDelta;
 
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        setContentView(R.layout.activity_main);
-
-        initDbs();
-
-        // check Android version to request permissions
-        if (shouldCheckOverlayPermission()) {
-            requestOverlayPermissions();
-        } else if (shouldCheckOtherPermissions()) {
-            requestOtherPermissions();
-        } else {
-            startService();
-        }
+    static void initDbs(Context context) {
+        dbHelper = new SpeedLimitWidgetDbHelper(context);
+        db = dbHelper.getWritableDatabase();
+        initSpeedAverage();
     }
 
     @Override
@@ -114,13 +109,58 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    void initDbs() {
-        if (dbHelper == null) {
-            dbHelper = new SpeedLimitWidgetDbHelper(this);
+    static int initSpeedAverage() {
+        String query = "SELECT * " +
+                " FROM " + SpeedAverageContract.ContractEntry.TABLE_NAME;
+
+        Cursor cursor = db.rawQuery(query, null);
+        int count = cursor.getCount();
+        if (count > 0) {
+            cursor.moveToLast();
+            averageDelta = cursor.getDouble(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE));
+            numSamples = cursor.getInt(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE));
+        } else {
+            ContentValues cv = new ContentValues();
+            cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE, 0);
+            cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES, 0);
+            db.insert(SpeedAverageContract.ContractEntry.TABLE_NAME, null, cv);
         }
-        if (db == null) {
-            db = dbHelper.getWritableDatabase();
+        return count;
+    }
+
+    static void updateSpeedAverage() {
+        ContentValues cv = new ContentValues();
+        cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE, averageDelta);
+        cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES, numSamples);
+
+        String query = "SELECT * " +
+                " FROM " + SpeedAverageContract.ContractEntry.TABLE_NAME;
+
+        Cursor cursor = db.rawQuery(query, null);
+        int count = cursor.getCount();
+        if (count > 0) {
+            db.update(SpeedAverageContract.ContractEntry.TABLE_NAME, cv, query, null);
+        } else {
+            db.insert(SpeedAverageContract.ContractEntry.TABLE_NAME, null, cv);
         }
+    }
+
+    public static boolean queryFavorite(GeoCoordinate location, int distanceInMeters) {
+        String query = "SELECT * " +
+                " FROM " + FavoritePlacesContract.ContractEntry.TABLE_NAME +
+                " WHERE " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                " * " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                " + " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                " * " +
+                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                " < " + distanceInMeters * distanceInMeters;
+
+        Cursor cursor = db.rawQuery(query, null);
+        int count = cursor.getCount();
+        return count > 0;
     }
 
     public static boolean queryFavorite(Location location, int distanceInMeters) {
@@ -141,7 +181,7 @@ public class MainActivity extends AppCompatActivity {
         return count > 0;
     }
 
-    public static void upateFavorites(String customName, Location location, String address) {
+    public static void upateFavorites(Context context, String customName, Location location, String address) {
         ContentValues cv;
         cv = new ContentValues();
         cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME, customName);
@@ -153,6 +193,40 @@ public class MainActivity extends AppCompatActivity {
 
         if (!queryFavorite(location, 50)) {
             id = db.insert(FavoritePlacesContract.ContractEntry.TABLE_NAME, null, cv);
+            initDbs(context);
+        }
+    }
+
+    public static void upateFavorites(Context context, String customName, GeoCoordinate location, String address) {
+        ContentValues cv;
+        cv = new ContentValues();
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME, customName);
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE, location.getLatitude()); //These Fields should be your String values of actual column names
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE, location.getLongitude()); //These Fields should be your String values of actual column names
+        cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_ADDRESS, address);
+        long id;
+        String whereClause = FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + "=? AND " + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + "=?";
+
+        if (!queryFavorite(location, 50)) {
+            id = db.insert(FavoritePlacesContract.ContractEntry.TABLE_NAME, null, cv);
+            initDbs(context);
+        }
+    }
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        initDbs(this);
+
+        // check Android version to request permissions
+        if (shouldCheckOverlayPermission()) {
+            requestOverlayPermissions();
+        } else if (shouldCheckOtherPermissions()) {
+            requestOtherPermissions();
+        } else {
+            startService();
         }
     }
 
@@ -224,10 +298,19 @@ public class MainActivity extends AppCompatActivity {
     private void initializeView() {
         resetListView();
 
-        findViewById(R.id.notify_me).setOnClickListener(new View.OnClickListener() {
+        findViewById(R.id.show_widget_btn).setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
                 startService(new Intent(MainActivity.this, FloatingViewService.class));
+                finish();
+            }
+        });
+
+        findViewById(R.id.close_app_btn).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                FloatingViewService.stopManagersAndListeners();
+                stopService(new Intent(MainActivity.this, FloatingViewService.class));
                 finish();
             }
         });
@@ -238,24 +321,28 @@ public class MainActivity extends AppCompatActivity {
         finish();
     }
 
-    private void requeryFavorites() {
+    void requeryFavorites() {
         String queryAll = "SELECT * FROM " + FavoritePlacesContract.ContractEntry.TABLE_NAME;
         Cursor cursor = db.rawQuery(queryAll, null);
-        if (adapterFavorites == null) {
-            adapterFavorites = new FavoritesCursorAdapter(this, cursor);
-        } else {
-            adapterFavorites.getCursor().close();
-            adapterFavorites.swapCursor(cursor);
-        }
+        adapterFavorites = new FavoritesCursorAdapter(this, cursor);
+        adapterFavorites.notifyDataSetChanged();
     }
 
-    private void resetListView() {
-        if (favorites == null) {
-            favorites = findViewById(R.id.favorites);
-        }
+    void resetListView() {
+        favorites = findViewById(R.id.favorites);
 
-        this.requeryFavorites();
+        favorites.setLongClickable(true);
+        favorites.setOnItemLongClickListener(new AdapterView.OnItemLongClickListener() {
+            public boolean onItemLongClick(AdapterView<?> parent, View view, int position, long id) {
+                Cursor cursor = ((CursorAdapter) favorites.getAdapter()).getCursor();
+                cursor.moveToPosition(position);
+                db.delete(FavoritePlacesContract.ContractEntry.TABLE_NAME, _ID + "=" + cursor.getString(cursor.getColumnIndexOrThrow(_ID)), null);
+                resetListView();
+                return true;
+            }
+        });
 
+        requeryFavorites();
         favorites.setAdapter(adapterFavorites);
     }
 

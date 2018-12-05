@@ -3,14 +3,16 @@
     <string name="filter_string_title">Speed Limit Widget</string>
 
     <string name="start_widget_button_text">Return To Widget</string>
+    <string name="close_app_button_text">Close App</string>
 
     <string name="navigation_speed_label_km">km/h</string>
     <string name="navigation_speed_label_m">m/h</string>
 
     <string name="navigation_speed_limit_default"></string>
 
-    <string name="custom_favorite_name_default">Custom Name</string>
-    <string name="custom_favorite_name">Home</string>
+    <string name="custom_favorite_name_default"></string>
     <string name="unknown_address">Unknown Address</string>
+
+    <string name="error_no_route">NR</string>
 
 </resources>

@@ -10,7 +10,6 @@ import android.widget.TextView;
 public class SpeedLimitLayout extends ConstraintLayout {
     private static TextView speedLimitTextView;
     private static ImageView speedLimitImageView;
-    private static ImageView closeButtonImageView;
 
     public SpeedLimitLayout(Context context) {
         super(context);
@@ -31,7 +30,6 @@ public class SpeedLimitLayout extends ConstraintLayout {
         inflate(getContext(), R.layout.speed_limit_layout, this);
         this.speedLimitTextView = findViewById(R.id.speed_limit_text);
         this.speedLimitImageView = findViewById(R.id.speed_limit_image);
-        this.closeButtonImageView = findViewById(R.id.close_btn);
 
         ViewTreeObserver vto = this.speedLimitImageView.getViewTreeObserver();
         vto.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {

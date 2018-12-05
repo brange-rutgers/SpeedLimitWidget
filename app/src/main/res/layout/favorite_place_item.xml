@@ -5,20 +5,6 @@
     android:layout_height="wrap_content">
 
     <EditText
-        android:id="@+id/custom_name"
-        android:layout_width="0dp"
-        android:layout_height="wrap_content"
-        android:layout_marginLeft="@dimen/view_horizontal_margin"
-        android:layout_marginTop="@dimen/view_vertical_margin"
-        android:layout_marginRight="@dimen/view_horizontal_margin"
-        android:layout_marginBottom="@dimen/view_vertical_margin"
-        android:hint="@string/custom_favorite_name_default"
-        android:inputType="text"
-        android:textSize="20sp"
-        app:layout_constraintLeft_toLeftOf="parent"
-        app:layout_constraintRight_toLeftOf="@+id/guideline_vertical" />
-
-    <EditText
         android:id="@+id/address"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -28,8 +14,8 @@
         android:layout_marginBottom="@dimen/view_vertical_margin"
         android:hint="@string/unknown_address"
         android:textSize="20sp"
-        app:layout_constraintLeft_toLeftOf="@+id/guideline_vertical"
-        app:layout_constraintRight_toLeftOf="@id/guideline_vertical2" />
+        app:layout_constraintLeft_toLeftOf="parent"
+        app:layout_constraintRight_toLeftOf="@id/guideline_vertical" />
 
     <TextView
         android:id="@+id/minutes_to_go"
@@ -40,20 +26,14 @@
         android:layout_marginRight="@dimen/view_horizontal_margin"
         android:layout_marginBottom="@dimen/view_vertical_margin"
         android:textSize="20sp"
+        android:text="NA"
         app:layout_constraintBottom_toBottomOf="@+id/barrier"
-        app:layout_constraintLeft_toLeftOf="@+id/guideline_vertical2"
+        app:layout_constraintLeft_toLeftOf="@+id/guideline_vertical"
         app:layout_constraintRight_toRightOf="parent"
-        app:layout_constraintTop_toTopOf="@id/custom_name" />
+        app:layout_constraintTop_toTopOf="@id/address" />
 
     <android.support.constraint.Guideline
         android:id="@+id/guideline_vertical"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        app:layout_constraintGuide_percent="0.25" />
-
-    <android.support.constraint.Guideline
-        android:id="@+id/guideline_vertical2"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="vertical"
@@ -64,6 +44,6 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         app:barrierDirection="bottom"
-        app:constraint_referenced_ids="custom_name,address,minutes_to_go" />
+        app:constraint_referenced_ids="address,minutes_to_go" />
 
 </android.support.constraint.ConstraintLayout>
