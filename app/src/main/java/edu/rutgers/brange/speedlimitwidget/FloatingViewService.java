@@ -43,8 +43,13 @@ import com.here.android.mpa.common.MapEngine;
 import com.here.android.mpa.common.MatchedGeoPosition;
 import com.here.android.mpa.common.OnEngineInitListener;
 import com.here.android.mpa.common.PositioningManager;
+import com.here.android.mpa.common.RoadElement;
 import com.here.android.mpa.guidance.NavigationManager;
 import com.here.android.mpa.prefetcher.MapDataPrefetcher;
+import com.here.android.mpa.search.ErrorCode;
+import com.here.android.mpa.search.GeocodeRequest2;
+import com.here.android.mpa.search.GeocodeResult;
+import com.here.android.mpa.search.ResultListener;
 
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
@@ -54,8 +59,9 @@ import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.Timestamp;
-import java.util.Calendar;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.concurrent.locks.ReentrantLock;
 
 import static com.google.android.gms.location.LocationServices.getFusedLocationProviderClient;
 
@@ -493,7 +499,7 @@ public class FloatingViewService extends Service {
         speedLimitTextViewExpanded.setText(currentSpeedLimitText);
     }
 
-    private void updateLocation(GeoPosition geoPosition) {
+    private void updateLocation(MatchedGeoPosition geoPosition) {
         Tuple<GeoCoordinate, java.sql.Timestamp> currentLocation = new Tuple(geoPosition.getCoordinate(), new java.sql.Timestamp(System.currentTimeMillis()));
         updateFavoriteLocation(currentLocation);
         GeoCoordinate g = new GeoCoordinate(0, 0);
@@ -501,11 +507,17 @@ public class FloatingViewService extends Service {
         g.setLongitude(currentLocation.x.getLongitude());
         lastPostion = new Tuple<>(g, currentLocation.y);
         double speed = geoPosition.getSpeed();
-        if (speed > 0) {
-            Tuple<Double, Long> newAverage = updateAverage(new Tuple<>(MainActivity.averageDelta, MainActivity.numSamples), speed);
-            MainActivity.averageDelta = newAverage.x;
-            MainActivity.numSamples = newAverage.y;
-            MainActivity.updateSpeedAverage();
+        double speedLimit =
+                geoPosition.getRoadElement().getSpeedLimit();
+        double delta = LocationHelper.meterPerSecToMilesPerHour(speedLimit - speed);
+
+        if (Math.abs(delta) > 88){
+            Toast.makeText(getApplicationContext(),"Where You're Going They Don't Need Roads",Toast.LENGTH_LONG).show();
+        }
+
+        if (speed > 0 && speedLimit > 0) {
+            Tuple<Double, Long> newAverage = updateAverage(new Tuple<>(MainActivity.averageDelta, MainActivity.numSamples), delta);
+            MainActivity.updateSpeedAverage(newAverage.x,newAverage.y);
         }
         updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(speed), 0);
     }
@@ -527,14 +539,7 @@ public class FloatingViewService extends Service {
                 public void onPositionUpdated(PositioningManager.LocationMethod locationMethod,
                                               GeoPosition geoPosition, boolean b) {
 
-                    /*
-                    String msg = "New Position Update: " +
-                            geoPosition.getCoordinate().getLatitude() +
-                            "," +
-                            geoPosition.getCoordinate().getLongitude();
-                    Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show();
-                    */
-                    updateLocation(geoPosition);
+                    // TODO GeoCode -> get locations on street, get locations in direction moving, route to end of the street, step through route
 
                     if (positioningManager.getRoadElement() == null && !fetchingDataInProgress) {
                         GeoBoundingBox areaAround = new GeoBoundingBox(geoPosition.getCoordinate(), 500, 500);
@@ -545,12 +550,16 @@ public class FloatingViewService extends Service {
                     if (geoPosition.isValid() && geoPosition instanceof MatchedGeoPosition) {
 
                         MatchedGeoPosition mgp = (MatchedGeoPosition) geoPosition;
+                        getSpeedTrap(mgp);
 
                         int currentSpeedLimitTransformed = 0;
                         double currentSpeedmps = mgp.getSpeed();
                         int currentSpeed = (int) LocationHelper.meterPerSecToMilesPerHour(currentSpeedmps);
 
                         if (mgp.getRoadElement() != null) {
+
+                            updateLocation(mgp);
+
                             double currentSpeedLimit = mgp.getRoadElement().getSpeedLimit();
                             currentSpeedLimitTransformed = (int) LocationHelper.meterPerSecToKmPerHour(currentSpeedLimit);
 
@@ -656,104 +665,40 @@ public class FloatingViewService extends Service {
         }
     }
 
-    class Path extends LinkedList<Tuple<Location, java.sql.Timestamp>> {
-        private static final int MAX_LOCATIONS = 5;
-        private int maxLocations;
-
-        public Path() {
-            super();
-            maxLocations = MAX_LOCATIONS;
-        }
-
-        public Path(String apiKey) {
-            this();
-        }
-
-        public Path(int maxLocations) {
-            this();
-            this.maxLocations = maxLocations;
-        }
-
-        public Path(String apiKey, int maxLocations) {
-            this(apiKey);
-            this.maxLocations = maxLocations;
-        }
-
-        public int getMaxLocations() {
-            return maxLocations;
-        }
-
-        @Override
-        public void push(Tuple<Location, java.sql.Timestamp> location) {
-            if (!this.isEmpty() &&
-                    Math.abs(this.get(this.size() - 1).y.getTime() - location.y.getTime()) < SAMPLE_RATE / this.getMaxLocations()) {
-                return;
-            }
-            if (this.size() == maxLocations) {
-                pop();
-            } else {
-                super.push(location);
-            }
-        }
-
-        public String getPath() {
-            String path = "";
-            if (this.size() > 0) {
-                path = this.get(0).x.getLatitude() + "," + this.get(0).x.getLongitude();
-            }
-            for (int i = 1; i < this.size(); i++) {
-                path += "|" + this.get(i).x.getLatitude() + "," + this.get(i).x.getLongitude();
-            }
-            return path;
-        }
-
-        public String getRequestUrl2() {
-            String url = "http://www.overpass-api.de/api/xapi?*[maxspeed=*][bbox=";
-            for (int i = this.size() - 2; i < this.size(); i++) {
-                url += this.get(i).x.getLatitude() + "," + this.get(i).x.getLongitude();
-                if (i < this.size() - 1) {
-                    url += ",";
-                }
-            }
-            url += "]";
-            return url;
-        }
-
-        private String readStream(InputStream is) {
-            try {
-                ByteArrayOutputStream bo = new ByteArrayOutputStream();
-                int i = is.read();
-                while (i != -1) {
-                    bo.write(i);
-                    i = is.read();
-                }
-                return bo.toString();
-            } catch (IOException e) {
-                return "";
-            }
-        }
-
-        public void query() {
-            String urlString = getRequestUrl2();
-            String response = "";
-            try {
-                URL url = new URL(urlString);
-                HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+    static boolean calculating = false;
+    ReentrantLock lock = new ReentrantLock();
+    private void getSpeedTrap(MatchedGeoPosition mgp){
+        RoadElement roadElement = mgp.getRoadElement();
+        String roadName = roadElement.getRoadName();
+        if (roadName.equals("")){
+            return;
+        } else {
+            GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(roadName);
+            int size = geocodeRequest2.getCollectionSize();
+            if (lock.tryLock()) {
                 try {
-                    InputStream in = new BufferedInputStream(urlConnection.getInputStream());
-                    response = readStream(in);
+                    if (!calculating){
+                        calculating = true;
+
+                        geocodeRequest2.execute(new ResultListener<List<GeocodeResult>>() {
+                            @Override
+                            public void onCompleted(List<GeocodeResult> geocodeResults, ErrorCode errorCode) {
+                                calculating = false;
+                                if (errorCode == ErrorCode.NONE) {
+                                    // TODO Calculate route
+                                    return;
+                                } else {
+                                    // handle error
+                                    return;
+                                }
+                            }
+                        });
+                    }
+
                 } finally {
-                    urlConnection.disconnect();
-                }
-            } finally {
-                if (response.equals("")) {
-                    return;
-                } else {
-                    return;
+                    lock.unlock();
                 }
             }
         }
-
     }
-
 }

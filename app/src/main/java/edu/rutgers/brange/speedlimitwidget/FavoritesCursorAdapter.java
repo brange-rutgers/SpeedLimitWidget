@@ -19,7 +19,9 @@ import android.widget.TextView;
 import com.here.android.mpa.common.GeoBoundingBox;
 import com.here.android.mpa.common.GeoCoordinate;
 import com.here.android.mpa.mapping.MapRoute;
+import com.here.android.mpa.routing.Maneuver;
 import com.here.android.mpa.routing.Route;
+import com.here.android.mpa.routing.RouteElement;
 import com.here.android.mpa.routing.RouteResult;
 import com.here.android.mpa.routing.RouteTta;
 import com.here.android.mpa.routing.Router;
@@ -40,6 +42,8 @@ public class FavoritesCursorAdapter extends CursorAdapter {
     ReentrantLock lock = new ReentrantLock();
     boolean routeCalculated;
     boolean addressTextSet;
+
+    static final int SPEED_TRAP_THRESHOLD = 20;
 
     public FavoritesCursorAdapter(Context context, Cursor cursor) {
         super(context, cursor, 0);
@@ -94,19 +98,33 @@ public class FavoritesCursorAdapter extends CursorAdapter {
             public void onCalculateRouteFinished(List<RouteResult> routeResults,
                                                  RoutingError routingError) {
                 routeCalculated = true;
-                // TODO Get route time
+
                 /* Calculation is done. Let's handle the result */
                 if (routingError == RoutingError.NONE) {
                     if (routeResults.get(0).getRoute() != null) {
                         /* Create a MapRoute so that it can be placed on the map */
                         Route route = routeResults.get(0).getRoute();
+
+                        if (false) {
+                            List<Maneuver> maneuvers = route.getManeuvers();
+                            if (maneuvers.size() > 0) {
+                                List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
+                                if (routeElements.size() > 1) {
+                                    float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
+                                    for (int i = 1; i < routeElements.size(); i++) {
+                                        double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
+                                        double delta = speedLimit - lastSpeedLimit;
+                                        delta = LocationHelper.meterPerSecToMilesPerHour(delta);
+                                        if (delta > SPEED_TRAP_THRESHOLD) {
+
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
                         MapRoute m_mapRoute = new MapRoute(route);
-                        /*
-                         * We may also want to make sure the map view is orientated properly
-                         * so the entire route can be easily seen.
-                         */
-                        GeoBoundingBox gbb = route
-                                .getBoundingBox();
+
                         RouteTta routeTta = route.getTtaExcludingTraffic(0);
 
                         int timeInSeconds = routeTta.getDuration();//seconds

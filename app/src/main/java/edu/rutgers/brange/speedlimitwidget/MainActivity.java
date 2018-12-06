@@ -18,6 +18,7 @@ import android.view.View;
 import android.widget.AdapterView;
 import android.widget.CursorAdapter;
 import android.widget.ListView;
+import android.widget.TextView;
 import android.widget.Toast;
 
 import com.here.android.mpa.common.GeoCoordinate;
@@ -41,6 +42,7 @@ public class MainActivity extends AppCompatActivity {
     static ListView favorites;
     static long numSamples;
     static double averageDelta;
+    static TextView statisticsTextView;
 
     static void initDbs(Context context) {
         dbHelper = new SpeedLimitWidgetDbHelper(context);
@@ -110,15 +112,22 @@ public class MainActivity extends AppCompatActivity {
     }
 
     static int initSpeedAverage() {
+        db.delete(SpeedAverageContract.ContractEntry.TABLE_NAME,_ID + ">1",null);
+
         String query = "SELECT * " +
                 " FROM " + SpeedAverageContract.ContractEntry.TABLE_NAME;
 
         Cursor cursor = db.rawQuery(query, null);
         int count = cursor.getCount();
         if (count > 0) {
-            cursor.moveToLast();
+            cursor.moveToFirst();
             averageDelta = cursor.getDouble(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE));
-            numSamples = cursor.getInt(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE));
+            numSamples = cursor.getInt(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES));
+
+            if (numSamples < 0){
+                averageDelta = 0;
+                numSamples = 0;
+            }
         } else {
             ContentValues cv = new ContentValues();
             cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE, 0);
@@ -128,20 +137,29 @@ public class MainActivity extends AppCompatActivity {
         return count;
     }
 
-    static void updateSpeedAverage() {
+    static void updateSpeedAverage(double x, long y) {
+        MainActivity.averageDelta = x;
+        MainActivity.numSamples = y;
+        updateStatisicsView(averageDelta);
         ContentValues cv = new ContentValues();
         cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE, averageDelta);
         cv.put(SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES, numSamples);
 
-        String query = "SELECT * " +
-                " FROM " + SpeedAverageContract.ContractEntry.TABLE_NAME;
-
-        Cursor cursor = db.rawQuery(query, null);
-        int count = cursor.getCount();
-        if (count > 0) {
-            db.update(SpeedAverageContract.ContractEntry.TABLE_NAME, cv, query, null);
+        int numRows;
+        String whereClause = _ID + "=1";
+        numRows = db.update(SpeedAverageContract.ContractEntry.TABLE_NAME, cv, whereClause, null);
+        if (numRows > 0) {
         } else {
-            db.insert(SpeedAverageContract.ContractEntry.TABLE_NAME, null, cv);
+            long id = db.insert(SpeedAverageContract.ContractEntry.TABLE_NAME, null, cv);
+            if (id == 0){
+                return;
+            }
+        }
+        Cursor cursor = db.rawQuery("SELECT " + SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES +
+            " FROM " + SpeedAverageContract.ContractEntry.TABLE_NAME +
+            " WHERE " + SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES + "<0",null);
+        if (cursor.getCount() > 0){
+            return;
         }
     }
 
@@ -219,6 +237,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
 
         initDbs(this);
+        statisticsTextView = findViewById(R.id.statistics_text_view);
+        updateStatisicsView(averageDelta);
 
         // check Android version to request permissions
         if (shouldCheckOverlayPermission()) {
@@ -290,6 +310,15 @@ public class MainActivity extends AppCompatActivity {
             //handle or raise error
         }
         return new String[0];
+    }
+
+    private static void updateStatisicsView(double avg){
+        if (statisticsTextView == null){
+            return;
+        } else {
+            statisticsTextView
+                    .setText(String.format("Average Speed Over the Speed Limit: %3.2f",avg));
+        }
     }
 
     /**
