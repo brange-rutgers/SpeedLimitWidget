@@ -100,29 +100,11 @@ public class FavoritesCursorAdapter extends CursorAdapter {
                 routeCalculated = true;
 
                 /* Calculation is done. Let's handle the result */
-                if (routingError == RoutingError.NONE) {
+                if (routingError == RoutingError.NONE ||
+                        routingError == RoutingError.VIOLATES_OPTIONS) {
                     if (routeResults.get(0).getRoute() != null) {
                         /* Create a MapRoute so that it can be placed on the map */
                         Route route = routeResults.get(0).getRoute();
-
-                        if (false) {
-                            List<Maneuver> maneuvers = route.getManeuvers();
-                            if (maneuvers.size() > 0) {
-                                List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
-                                if (routeElements.size() > 1) {
-                                    float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
-                                    for (int i = 1; i < routeElements.size(); i++) {
-                                        double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
-                                        double delta = speedLimit - lastSpeedLimit;
-                                        delta = LocationHelper.meterPerSecToMilesPerHour(delta);
-                                        if (delta > SPEED_TRAP_THRESHOLD) {
-
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
                         MapRoute m_mapRoute = new MapRoute(route);
 
                         RouteTta routeTta = route.getTtaExcludingTraffic(0);
@@ -137,6 +119,9 @@ public class FavoritesCursorAdapter extends CursorAdapter {
                             double deltaS = LocationHelper.milesPerHourToMetersPerSecond(5);
                             double newTime = (timeInSeconds - distanceInMeters / (distanceInMeters - deltaS * timeInSeconds));
                             newTime = timeInSeconds * (1 - distanceInMeters / (distanceInMeters + timeInSeconds * deltaS));
+
+                            //mps=m/s->s=m/mps
+                            double tim = distanceInMeters / deltaS;
 
                             TimeZone tz = TimeZone.getTimeZone("UTC");
                             SimpleDateFormat df = new SimpleDateFormat("HH:mm:ss");
@@ -157,7 +142,7 @@ public class FavoritesCursorAdapter extends CursorAdapter {
                         // TODO Handle Error
                     }
                 } else {
-                    // TODO Handle Error
+                    System.out.println(routingError.toString());
                     minutesLeftView.setText(mContext.getString(R.string.error_no_route));
                 }
             }

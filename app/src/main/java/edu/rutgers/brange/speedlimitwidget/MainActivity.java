@@ -124,7 +124,8 @@ public class MainActivity extends AppCompatActivity {
             averageDelta = cursor.getDouble(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_AVERAGE));
             numSamples = cursor.getInt(cursor.getColumnIndexOrThrow(SpeedAverageContract.ContractEntry.COLUMN_NAME_SAMPLES));
 
-            if (numSamples < 0){
+            if (numSamples < 0 ||
+                    Math.abs(averageDelta) > 200) {
                 averageDelta = 0;
                 numSamples = 0;
             }
@@ -164,16 +165,17 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public static boolean queryFavorite(GeoCoordinate location, int distanceInMeters) {
+        final long factor = 111139;
         String query = "SELECT * " +
                 " FROM " + FavoritePlacesContract.ContractEntry.TABLE_NAME +
                 " WHERE " +
-                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                "((" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ") * " + factor + ")" +
                 " * " +
-                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ")" +
+                "((" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + " - " + location.getLatitude() + ") * " + factor + ")" +
                 " + " +
-                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                "((" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ") * " + factor + ")" +
                 " * " +
-                "(" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ")" +
+                "((" + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + " - " + location.getLongitude() + ") * " + factor + ")" +
                 " < " + distanceInMeters * distanceInMeters;
 
         Cursor cursor = db.rawQuery(query, null);
@@ -216,6 +218,7 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public static void upateFavorites(Context context, String customName, GeoCoordinate location, String address) {
+        final int CHECK_IN_THRESHOLD = 100;
         ContentValues cv;
         cv = new ContentValues();
         cv.put(FavoritePlacesContract.ContractEntry.COLUMN_NAME_NAME, customName);
@@ -225,7 +228,8 @@ public class MainActivity extends AppCompatActivity {
         long id;
         String whereClause = FavoritePlacesContract.ContractEntry.COLUMN_NAME_LATITUDE + "=? AND " + FavoritePlacesContract.ContractEntry.COLUMN_NAME_LONGITUDE + "=?";
 
-        if (!queryFavorite(location, 50)) {
+        if (!queryFavorite(location, CHECK_IN_THRESHOLD)) {
+            Toast.makeText(context, "Checkin Triggered", Toast.LENGTH_LONG).show();
             id = db.insert(FavoritePlacesContract.ContractEntry.TABLE_NAME, null, cv);
             initDbs(context);
         }

@@ -11,6 +11,7 @@ import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
+import android.media.MediaPlayer;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
@@ -44,8 +45,18 @@ import com.here.android.mpa.common.MatchedGeoPosition;
 import com.here.android.mpa.common.OnEngineInitListener;
 import com.here.android.mpa.common.PositioningManager;
 import com.here.android.mpa.common.RoadElement;
+import com.here.android.mpa.electronic_horizon.ElectronicHorizon;
+import com.here.android.mpa.electronic_horizon.Link;
+import com.here.android.mpa.electronic_horizon.PathTree;
+import com.here.android.mpa.electronic_horizon.Position;
 import com.here.android.mpa.guidance.NavigationManager;
 import com.here.android.mpa.prefetcher.MapDataPrefetcher;
+import com.here.android.mpa.routing.Maneuver;
+import com.here.android.mpa.routing.Route;
+import com.here.android.mpa.routing.RouteElement;
+import com.here.android.mpa.routing.RouteResult;
+import com.here.android.mpa.routing.Router;
+import com.here.android.mpa.routing.RoutingError;
 import com.here.android.mpa.search.ErrorCode;
 import com.here.android.mpa.search.GeocodeRequest2;
 import com.here.android.mpa.search.GeocodeResult;
@@ -59,11 +70,13 @@ import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.sql.Timestamp;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
 import static com.google.android.gms.location.LocationServices.getFusedLocationProviderClient;
+import static edu.rutgers.brange.speedlimitwidget.FavoritesCursorAdapter.SPEED_TRAP_THRESHOLD;
 
 public class FloatingViewService extends Service {
 
@@ -82,6 +95,7 @@ public class FloatingViewService extends Service {
     static MapDataPrefetcher mapDataPrefetcher;
     static NavigationManager navigationManager;
     static MapDataPrefetcher.Adapter prefetcherListener;
+    static final ReentrantLock mpLock = new ReentrantLock();
 
     private ScaleGestureDetector mScaleDetector;
     private float mScaleFactor = 1.f;
@@ -96,6 +110,8 @@ public class FloatingViewService extends Service {
 
     double startTime, deltaTime;
     private int viewState;
+    static ElectronicHorizon electronicHorizon;
+    static MediaPlayer mp;
 
     public FloatingViewService() {
     }
@@ -373,7 +389,6 @@ public class FloatingViewService extends Service {
             long mostRecentLocationTime = mostRecentFavorite.y.getTime();
             long diff = currentLocationTime - mostRecentLocationTime;
             if (Math.abs(currentLocation.y.getTime() - mostRecentFavorite.y.getTime()) > 1000 * CHECK_IN_TIME_IN_SECONDS && !favoriteAdded) {
-                Toast.makeText(this, "Checkin Triggered", Toast.LENGTH_LONG).show();
                 MainActivity.upateFavorites(getBaseContext(), getString(R.string.custom_favorite_name_default), mostRecentFavorite.x, "");
                 favoriteAdded = true;
             }
@@ -432,6 +447,8 @@ public class FloatingViewService extends Service {
         }
     }
 
+    static MatchedGeoPosition lastMgp;
+
     private void initSDK() {
         final ApplicationContext appContext = new ApplicationContext(getApplicationContext());
 
@@ -449,17 +466,14 @@ public class FloatingViewService extends Service {
                 }
             }
         });
+
     }
 
     private void startMangersAndListeners() {
         startPositioningManager();
         startNavigationManager();
         startMapDataPrefetcher();
-    }
-
-    private void init(Context context) {
-        viewState = 0;
-        mScaleDetector = new ScaleGestureDetector(context, new ScaleListener());
+        startElectronicHorizon();
     }
 
     private void startPositioningManager() {
@@ -499,27 +513,15 @@ public class FloatingViewService extends Service {
         speedLimitTextViewExpanded.setText(currentSpeedLimitText);
     }
 
-    private void updateLocation(MatchedGeoPosition geoPosition) {
-        Tuple<GeoCoordinate, java.sql.Timestamp> currentLocation = new Tuple(geoPosition.getCoordinate(), new java.sql.Timestamp(System.currentTimeMillis()));
-        updateFavoriteLocation(currentLocation);
-        GeoCoordinate g = new GeoCoordinate(0, 0);
-        g.setLatitude(currentLocation.x.getLatitude());
-        g.setLongitude(currentLocation.x.getLongitude());
-        lastPostion = new Tuple<>(g, currentLocation.y);
-        double speed = geoPosition.getSpeed();
-        double speedLimit =
-                geoPosition.getRoadElement().getSpeedLimit();
-        double delta = LocationHelper.meterPerSecToMilesPerHour(speedLimit - speed);
-
-        if (Math.abs(delta) > 88){
-            Toast.makeText(getApplicationContext(),"Where You're Going They Don't Need Roads",Toast.LENGTH_LONG).show();
-        }
-
-        if (speed > 0 && speedLimit > 0) {
-            Tuple<Double, Long> newAverage = updateAverage(new Tuple<>(MainActivity.averageDelta, MainActivity.numSamples), delta);
-            MainActivity.updateSpeedAverage(newAverage.x,newAverage.y);
-        }
-        updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(speed), 0);
+    private void init(Context context) {
+        mp = MediaPlayer.create(this, R.raw.crash_x);
+        mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            public void onCompletion(MediaPlayer mp) {
+                mp.release();
+            }
+        });
+        viewState = 0;
+        mScaleDetector = new ScaleGestureDetector(context, new ScaleListener());
     }
 
     private void startMapDataPrefetcher() {
@@ -600,6 +602,36 @@ public class FloatingViewService extends Service {
         }
     }
 
+    private void updateLocation(MatchedGeoPosition geoPosition) {
+        Tuple<GeoCoordinate, java.sql.Timestamp> currentLocation = new Tuple(geoPosition.getCoordinate(), new java.sql.Timestamp(System.currentTimeMillis()));
+        updateFavoriteLocation(currentLocation);
+        GeoCoordinate g = new GeoCoordinate(0, 0);
+        g.setLatitude(currentLocation.x.getLatitude());
+        g.setLongitude(currentLocation.x.getLongitude());
+        lastPostion = new Tuple<>(g, currentLocation.y);
+        double speed = geoPosition.getSpeed();
+        double speedLimit =
+                geoPosition.getRoadElement().getSpeedLimit();
+        double delta = LocationHelper.meterPerSecToMilesPerHour(speedLimit - speed);
+
+        if (Math.abs(delta) > 88 &&
+                Math.abs(delta) < 200) {
+            Toast.makeText(getApplicationContext(), "Where You're Going They Don't Need Roads", Toast.LENGTH_LONG).show();
+        }
+
+        if (Math.abs(delta) < 200) {
+            if (speed > 0 &&
+                    speedLimit > 0) {
+                Tuple<Double, Long> newAverage = updateAverage(new Tuple<>(MainActivity.averageDelta, MainActivity.numSamples), delta);
+                MainActivity.updateSpeedAverage(newAverage.x, newAverage.y);
+            }
+
+            updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(speed), 0);
+
+        } else {
+            updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(0), 0);
+        }
+    }
     private void startNavigationManager() {
 
         if (navigationManager == null) {
@@ -665,40 +697,179 @@ public class FloatingViewService extends Service {
         }
     }
 
-    static boolean calculating = false;
-    ReentrantLock lock = new ReentrantLock();
-    private void getSpeedTrap(MatchedGeoPosition mgp){
-        RoadElement roadElement = mgp.getRoadElement();
-        String roadName = roadElement.getRoadName();
-        if (roadName.equals("")){
-            return;
-        } else {
-            GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(roadName);
-            int size = geocodeRequest2.getCollectionSize();
-            if (lock.tryLock()) {
-                try {
-                    if (!calculating){
-                        calculating = true;
-
-                        geocodeRequest2.execute(new ResultListener<List<GeocodeResult>>() {
-                            @Override
-                            public void onCompleted(List<GeocodeResult> geocodeResults, ErrorCode errorCode) {
-                                calculating = false;
-                                if (errorCode == ErrorCode.NONE) {
-                                    // TODO Calculate route
-                                    return;
-                                } else {
-                                    // handle error
-                                    return;
-                                }
-                            }
-                        });
+    private void startElectronicHorizon() {
+        if (electronicHorizon == null) {
+            try {
+                electronicHorizon = new ElectronicHorizon();
+                electronicHorizon.setLookAheadDistancesInCentimeters(500 * 100);
+                electronicHorizon.setTrailingDistanceInCentimeters(0);
+                electronicHorizon.setListener(new ElectronicHorizon.Listener() {
+                    @Override
+                    public void onNewPosition(Position position) {
+                        PathTree pathTree = position.getPathTree();
+                        if (pathTree == null) {
+                            // we seem to be off road
+                        } else {
+                            LocationHelper.logSpeedLimits(electronicHorizon, pathTree);
+                        }
                     }
 
-                } finally {
-                    lock.unlock();
+                    @Override
+                    public void onTreeReset() {
+                    }
+
+                    @Override
+                    public void onLinkAdded(PathTree path, Link link) {
+                    }
+
+                    @Override
+                    public void onLinkRemoved(PathTree path, Link link) {
+                    }
+
+                    @Override
+                    public void onPathAdded(PathTree path) {
+                    }
+
+                    @Override
+                    public void onPathRemoved(PathTree path) {
+                    }
+
+                    @Override
+                    public void onChildDetached(PathTree parent, PathTree child) {
+                    }
+                });
+            } catch (java.security.AccessControlException e) {
+                return;
+            }
+        }
+    }
+    static boolean calculating = false;
+    ReentrantLock lock = new ReentrantLock();
+
+    private void getSpeedTrap(final MatchedGeoPosition mgp) {
+        RoadElement roadElement = mgp.getRoadElement();
+
+        if (roadElement == null) {
+
+        } else {
+
+            String roadName = roadElement.getRoadName();
+
+            ArrayList<GeoCoordinate> enRoute = new ArrayList<>();
+            int index = -1;
+            double greatestDistance = -1;
+
+            if (lastMgp == null) {
+
+            } else {
+                List<GeoCoordinate> geometry = roadElement.getGeometry();
+                for (int i = 0; i < geometry.size(); i++) {
+                    if (LocationHelper.isCloser(geometry.get(i), mgp.getCoordinate(), lastMgp.getCoordinate())) {
+                        enRoute.add(geometry.get(i));
+                        double dist = LocationHelper.distance(geometry.get(i), mgp.getCoordinate());
+                        if (dist > greatestDistance) {
+                            index = enRoute.size() - 1;
+                            greatestDistance = dist;
+                        }
+                    }
                 }
             }
+            if (lastMgp == null || LocationHelper.distance(lastMgp.getCoordinate(), mgp.getCoordinate()) > 0) {
+                lastMgp = mgp;
+            }
+
+            if (roadName.equals("")) {
+                return;
+            } else if (index > -1) {
+                final double DESIRED_DISTANCE = 100;
+                double enRouteLatitude = enRoute.get(index).getLatitude();
+                double enRouteLongitude = enRoute.get(index).getLongitude();
+                double mgpLatitude = mgp.getCoordinate().getLatitude();
+                double mgpLongitude = mgp.getCoordinate().getLongitude();
+                double angle = Math.atan((enRouteLatitude - mgpLatitude) / (enRouteLongitude - mgpLongitude));
+                final GeoCoordinate newGeoCoordinate = LocationHelper.getGeoCoordinateFromPositionDistanceBearing(
+                        mgp.getCoordinate(),
+                        DESIRED_DISTANCE,
+                        Math.toDegrees(angle));
+                double dist = LocationHelper.distance(mgp.getCoordinate(), newGeoCoordinate);
+                GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(roadName);
+                try {
+                    geocodeRequest2.setSearchArea(newGeoCoordinate, (int) DESIRED_DISTANCE);
+                    int size = geocodeRequest2.getCollectionSize();
+                    if (lock.tryLock()) {
+                        try {
+                            if (!calculating) {
+                                calculating = true;
+                                double mgpSpeedLimit = mgp.getRoadElement().getSpeedLimit();
+                                geocodeRequest2.execute(new ResultListener<List<GeocodeResult>>() {
+                                    @Override
+                                    public void onCompleted(List<GeocodeResult> geocodeResults, ErrorCode errorCode) {
+                                        final Router.Listener<List<RouteResult>, RoutingError> routerListener = new Router.Listener<List<RouteResult>, RoutingError>() {
+                                            @Override
+                                            public void onProgress(int i) {
+
+                                            }
+
+                                            @Override
+                                            public void onCalculateRouteFinished(List<RouteResult> routeResults, RoutingError routingError) {
+                                                calculating = false;
+                                                Route route = routeResults.get(0).getRoute();
+
+                                                if (true) {
+                                                    List<Maneuver> maneuvers = route.getManeuvers();
+                                                    if (maneuvers.size() > 0) {
+                                                        List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
+                                                        boolean thresholdMet = false;
+                                                        if (routeElements.size() > 1) {
+                                                            float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
+                                                            for (int i = 1; i < routeElements.size(); i++) {
+                                                                double dist = routeElements.get(i).getGeometry().get(0).distanceTo(mgp.getCoordinate());
+                                                                double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
+                                                                double delta = lastSpeedLimit - speedLimit;
+                                                                delta = LocationHelper.meterPerSecToMilesPerHour(delta);
+                                                                String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(speedLimit), delta);
+                                                                System.out.println(msg);
+                                                                if (speedLimit > 0 &&
+                                                                        delta > SPEED_TRAP_THRESHOLD) {
+                                                                    Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
+
+                                                                    if (mpLock.tryLock()) {
+                                                                        try {
+                                                                            if (!mp.isPlaying()) {
+                                                                                mp.start();
+                                                                            }
+                                                                        } catch (java.lang.IllegalStateException e) {
+                                                                        } finally {
+                                                                            mpLock.unlock();
+                                                                        }
+                                                                    }
+                                                                    thresholdMet = true;
+                                                                    break;
+                                                                }
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                            }
+                                        };
+                                        if (geocodeResults.size() > 0) {
+                                            LocationHelper.calculateRoute(mgp.getCoordinate(), geocodeResults.get(0).getLocation().getCoordinate(), routerListener);
+                                        }
+                                        return;
+                                    }
+                                });
+                            }
+
+                        } finally {
+                            lock.unlock();
+                        }
+                    }
+                } catch (IllegalArgumentException e) {
+
+                }
+            }
+
         }
     }
 }

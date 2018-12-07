@@ -1,10 +1,18 @@
 package edu.rutgers.brange.speedlimitwidget;
 
 import android.location.Location;
+import android.util.Log;
 import android.widget.Toast;
 
 import com.here.android.mpa.common.GeoBoundingBox;
 import com.here.android.mpa.common.GeoCoordinate;
+import com.here.android.mpa.electronic_horizon.DataNotReadyException;
+import com.here.android.mpa.electronic_horizon.ElectronicHorizon;
+import com.here.android.mpa.electronic_horizon.Link;
+import com.here.android.mpa.electronic_horizon.LinkInformation;
+import com.here.android.mpa.electronic_horizon.MapAccessor;
+import com.here.android.mpa.electronic_horizon.PathTree;
+import com.here.android.mpa.electronic_horizon.Position;
 import com.here.android.mpa.mapping.Map;
 import com.here.android.mpa.mapping.MapRoute;
 import com.here.android.mpa.routing.CoreRouter;
@@ -42,6 +50,31 @@ class LocationHelper {
         double d = R * c; // Distance in km
         d = d * 1000;
         return d;
+    }
+
+    static GeoCoordinate getGeoCoordinateFromPositionDistanceBearing(GeoCoordinate init, double distanceInMeters, double bearingInDegrees) {
+        double R = 6378.1;  //Radius of the Earth
+        double brng = Math.toRadians(bearingInDegrees);  //Bearing is 90 degrees converted to radians.
+        double d = distanceInMeters / 1000;  //Distance in km
+
+        double lat2 = 52.20444; // - the lat result I'm hoping for
+        double lon2 = 0.36056; // - the long result I'm hoping for.
+
+        double lat1 = Math.toRadians(init.getLatitude()); //Current lat point converted to radians
+        double lon1 = Math.toRadians(init.getLongitude()); //Current long point converted to radians
+
+        lat2 = Math.asin(Math.sin(lat1) * Math.cos(d / R) +
+                Math.cos(lat1) * Math.sin(d / R) * Math.cos(brng));
+
+        lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(d / R) * Math.cos(lat1),
+                Math.cos(d / R) - Math.sin(lat1) * Math.sin(lat2));
+
+        lat2 = Math.toDegrees(lat2);
+        lon2 = Math.toDegrees(lon2);
+
+        System.out.println(lat2 + ", " + lon2);
+
+        return new GeoCoordinate(lat2, lon2);
     }
 
     static double metersToMiles(double meters) {
@@ -145,9 +178,7 @@ class LocationHelper {
         routePlan.setRouteOptions(routeOptions);
 
         /* Define waypoints for the route */
-        /* START: 4350 Still Creek Dr */
         RouteWaypoint startPoint = new RouteWaypoint(new GeoCoordinate(start.getLatitude(), start.getLongitude()));
-        /* END: Langley BC */
         RouteWaypoint destination = new RouteWaypoint(new GeoCoordinate(end.getLatitude(), end.getLongitude()));
 
         /* Add both waypoints to the route plan */
@@ -157,6 +188,38 @@ class LocationHelper {
         /* Trigger the route calculation,results will be called back via the listener */
         coreRouter.calculateRoute(routePlan,
                 routerListener);
+    }
+
+    static boolean isCloser(GeoCoordinate init, GeoCoordinate isCloserTo, GeoCoordinate otherCoordinate) {
+        return isCloser(
+                init.getLatitude(), init.getLongitude(),
+                isCloserTo.getLatitude(), isCloserTo.getLongitude(),
+                otherCoordinate.getLatitude(), otherCoordinate.getLongitude());
+    }
+
+    static boolean isCloser(FloatingViewService.Coordinate init, FloatingViewService.Coordinate isCloserTo, FloatingViewService.Coordinate otherCoordinate) {
+        return isCloser(init.getX(), init.getY(), isCloserTo.getX(), isCloserTo.getY(), otherCoordinate.getX(), otherCoordinate.getY());
+    }
+
+    static boolean isCloser(double xInit, double yInit, double x1, double y1, double x2, double y2) {
+        double distance1 = Math.sqrt(Math.pow(xInit - x1, 2) + Math.pow(yInit - y1, 2));
+        double distance2 = Math.sqrt(Math.pow(xInit - x2, 2) + Math.pow(yInit - y2, 2));
+        return distance1 < distance2;
+    }
+
+    static void logSpeedLimits(ElectronicHorizon electronicHorizon, PathTree pathTree) {
+
+        MapAccessor mapAccessor = electronicHorizon.getMapAccessor();
+        for (Link link : pathTree.getLinks()) {
+            LinkInformation linkInformation;
+            try {
+                linkInformation = mapAccessor.getLinkInformation(link);
+            } catch (DataNotReadyException dataNotReadyException) {
+                return;
+            }
+            double speedLimitMetersPerSecond = linkInformation.getSpeedLimitMetersPerSecond();
+            String speedLimitText = (int) Math.round(speedLimitMetersPerSecond * 3.6) + " Km";
+        }
     }
 
 }
