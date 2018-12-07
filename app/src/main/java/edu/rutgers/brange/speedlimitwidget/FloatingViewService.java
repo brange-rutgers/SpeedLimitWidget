@@ -235,7 +235,11 @@ public class FloatingViewService extends Service {
         speedLimitTextViewCollapsed = speedLimitViewCollapsed.findViewById(R.id.speed_limit_text);
 
         init(this);
-        resize(2.f);
+        if (MainActivity.initSettings()) {
+            resize(MainActivity.factor);
+        } else {
+            resize(2.f);
+        }
 
         //Add the view to the window.
         final WindowManager.LayoutParams params = new WindowManager.LayoutParams(
@@ -247,8 +251,8 @@ public class FloatingViewService extends Service {
 
         //Specify the view position
         params.gravity = Gravity.TOP | Gravity.RIGHT;        //Initially view will be added to top-left corner
-        params.x = 225;
-        params.y = 175;
+        params.x = MainActivity.posX;
+        params.y = MainActivity.posY;
 
         //Add the view to the window
         mWindowManager = (WindowManager) getSystemService(WINDOW_SERVICE);
@@ -291,9 +295,55 @@ public class FloatingViewService extends Service {
                 return (int) (initialTouchX - event.getRawX());
             }
 
+            private float mPrimStartTouchEventX = -1;
+            private float mPrimStartTouchEventY = -1;
+            private float mSecStartTouchEventX = -1;
+            private float mSecStartTouchEventY = -1;
+            private float mPrimSecStartTouchDistance = 0;
+
+            Coordinate getRawXY(final View v, final MotionEvent event, int actionIndex) {
+
+                int rawX, rawY;
+                final int location[] = {0, 0};
+                v.getLocationOnScreen(location);
+                rawX = (int) event.getX(actionIndex) + location[0];
+                rawY = (int) event.getY(actionIndex) + location[1];
+                return new Coordinate(rawX, rawY);
+            }
+
+            public float distance(MotionEvent event, int first, int second) {
+                if (event.getPointerCount() >= 2) {
+                    final float x = event.getX(first) - event.getX(second);
+                    final float y = event.getY(first) - event.getY(second);
+
+                    return (float) Math.sqrt(x * x + y * y);
+                } else {
+                    return 0;
+                }
+            }
+
+            private boolean isPinchGesture(MotionEvent event) {
+                if (event.getPointerCount() == 2) {
+                    final float distanceCurrent = distance(event, 0, 1);
+                    final float diffPrimX = mPrimStartTouchEventX - event.getX(0);
+                    final float diffPrimY = mPrimStartTouchEventY - event.getY(0);
+                    final float diffSecX = mSecStartTouchEventX - event.getX(1);
+                    final float diffSecY = mSecStartTouchEventY - event.getY(1);
+
+                    if (// if the distance between the two fingers has increased past
+                        // our threshold
+                            (diffPrimY * diffSecY) <= 0
+                                    && (diffPrimX * diffSecX) <= 0) {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
+
             @Override
             public boolean onTouch(View v, MotionEvent event) {
-                switch (event.getAction()) {
+                switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
 
                         // Touch start time
@@ -306,6 +356,21 @@ public class FloatingViewService extends Service {
                         //get the touch location
                         initialTouchX = event.getRawX();
                         initialTouchY = event.getRawY();
+
+
+                        if (event.getPointerCount() == 1) {
+                            mPrimStartTouchEventX = event.getX(0);
+                            mPrimStartTouchEventY = event.getY(0);
+                            Log.d("TAG", String.format("POINTER ONE X = %.5f, Y = %.5f", mPrimStartTouchEventX, mPrimStartTouchEventY));
+                        }
+                        if (event.getPointerCount() == 2) {
+                            // Starting distance between fingers
+                            mSecStartTouchEventX = event.getX(1);
+                            mSecStartTouchEventY = event.getY(1);
+                            mPrimSecStartTouchDistance = distance(event, 0, 1);
+                            Log.d("TAG", String.format("POINTER TWO X = %.5f, Y = %.5f", mSecStartTouchEventX, mSecStartTouchEventY));
+                        }
+
                         return false;
                     case MotionEvent.ACTION_POINTER_DOWN:
                         return false;
@@ -326,22 +391,33 @@ public class FloatingViewService extends Service {
                                 swapView();
                             }
                         }
+
+                        if (event.getPointerCount() < 2) {
+                            mSecStartTouchEventX = -1;
+                            mSecStartTouchEventY = -1;
+                        }
+                        if (event.getPointerCount() < 1) {
+                            mPrimStartTouchEventX = -1;
+                            mPrimStartTouchEventY = -1;
+                        }
+
                         return false;
                     case MotionEvent.ACTION_POINTER_UP:
-                        Coordinate c1 = new Coordinate(initialX, initialY);
-                        Coordinate c2 = new Coordinate(event.getRawX(), event.getRawY());
-                        Coordinate init;
+                        Coordinate initialPrimaryTouch = new Coordinate(initialX, initialY);
+                        Coordinate endPrimaryTouch = new Coordinate(event.getRawX(), event.getRawY());
+                        Coordinate secondaryTouch;
                         int pointerCount = event.getPointerCount();
                         if (pointerCount > 1) {
-                            float posX = event.getX(1);
-                            float posY = event.getY(1);
-                            init = new Coordinate(posX, posY);
+                            Coordinate rawPointerPostion = getRawXY(v, event, 1);
+                            float posX = rawPointerPostion.x;
+                            float posY = rawPointerPostion.y;
+                            secondaryTouch = new Coordinate(posX, posY);
                         } else {
                             return false;
                         }
                         float rawX = event.getRawX();
                         float dragDiff = Math.abs(rawX - initialTouchX);
-                        if (isCloser(init, c1, c2)) {
+                        if (isCloser(secondaryTouch, initialPrimaryTouch, endPrimaryTouch)) {
 
                         } else {
                             dragDiff *= -1;
@@ -349,14 +425,22 @@ public class FloatingViewService extends Service {
                         int width = v.getWidth();
                         float resizeFactor = (width + dragDiff) / width;
                         resize(resizeFactor);
+                        MainActivity.updateSettings(resizeFactor, MainActivity.posX, MainActivity.posY);
                         return false;
                     case MotionEvent.ACTION_MOVE:
                         //Calculate the X and Y coordinates of the view.
                         params.x = initialX + getDx(event);
                         params.y = initialY + (int) (event.getRawY() - initialTouchY);
 
+                        MainActivity.updateSettings(1, params.x, params.y);
+
                         //Update the layout with new X & Y coordinate
                         mWindowManager.updateViewLayout(mFloatingView, params);
+
+                        if (isPinchGesture(event)) {
+                            return false;
+                        }
+
                         return false;
                 }
                 return false;
