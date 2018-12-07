@@ -747,6 +747,8 @@ public class FloatingViewService extends Service {
     ReentrantLock lock = new ReentrantLock();
 
     private void getSpeedTrap(final MatchedGeoPosition mgp) {
+        final double DESIRED_DISTANCE = 100;
+
         RoadElement roadElement = mgp.getRoadElement();
 
         if (roadElement == null) {
@@ -758,6 +760,7 @@ public class FloatingViewService extends Service {
             ArrayList<GeoCoordinate> enRoute = new ArrayList<>();
             int index = -1;
             double greatestDistance = -1;
+            int closerCount = 0;
 
             if (lastMgp == null) {
 
@@ -765,6 +768,7 @@ public class FloatingViewService extends Service {
                 List<GeoCoordinate> geometry = roadElement.getGeometry();
                 for (int i = 0; i < geometry.size(); i++) {
                     if (LocationHelper.isCloser(geometry.get(i), mgp.getCoordinate(), lastMgp.getCoordinate())) {
+                        closerCount++;
                         enRoute.add(geometry.get(i));
                         double dist = LocationHelper.distance(geometry.get(i), mgp.getCoordinate());
                         if (dist > greatestDistance) {
@@ -774,6 +778,7 @@ public class FloatingViewService extends Service {
                     }
                 }
             }
+
             if (lastMgp == null || LocationHelper.distance(lastMgp.getCoordinate(), mgp.getCoordinate()) > 0) {
                 lastMgp = mgp;
             }
@@ -781,7 +786,6 @@ public class FloatingViewService extends Service {
             if (roadName.equals("")) {
                 return;
             } else if (index > -1) {
-                final double DESIRED_DISTANCE = 100;
                 double enRouteLatitude = enRoute.get(index).getLatitude();
                 double enRouteLongitude = enRoute.get(index).getLongitude();
                 double mgpLatitude = mgp.getCoordinate().getLatitude();
@@ -815,43 +819,41 @@ public class FloatingViewService extends Service {
                                                 calculating = false;
                                                 Route route = routeResults.get(0).getRoute();
 
-                                                if (true) {
-                                                    List<Maneuver> maneuvers = route.getManeuvers();
-                                                    if (maneuvers.size() > 0) {
-                                                        List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
-                                                        boolean thresholdMet = false;
-                                                        if (routeElements.size() > 1) {
-                                                            float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
-                                                            for (int i = 1; i < routeElements.size(); i++) {
-                                                                double dist = routeElements.get(i).getGeometry().get(0).distanceTo(mgp.getCoordinate());
-                                                                double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
-                                                                double delta = lastSpeedLimit - speedLimit;
-                                                                delta = LocationHelper.meterPerSecToMilesPerHour(delta);
-                                                                String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(speedLimit), delta);
-                                                                System.out.println(msg);
-                                                                if (speedLimit > 0 &&
-                                                                        delta > SPEED_TRAP_THRESHOLD) {
-                                                                    Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
+                                                List<Maneuver> maneuvers = route.getManeuvers();
+                                                if (maneuvers.size() > 0) {
+                                                    List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
+                                                    boolean thresholdMet = false;
+                                                    if (routeElements.size() > 1) {
+                                                        float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
+                                                        for (int i = 1; i < routeElements.size(); i++) {
+                                                            double dist = routeElements.get(i).getGeometry().get(0).distanceTo(mgp.getCoordinate());
+                                                            double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
+                                                            double delta = lastSpeedLimit - speedLimit;
+                                                            delta = LocationHelper.meterPerSecToMilesPerHour(delta);
+                                                            String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(speedLimit), delta);
+                                                            System.out.println(msg);
+                                                            if (speedLimit > 0 &&
+                                                                    delta > SPEED_TRAP_THRESHOLD) {
+                                                                Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
 
-                                                                    if (mpLock.tryLock()) {
-                                                                        try {
-                                                                            if (!mp.isPlaying()) {
-                                                                                mp.start();
-                                                                            }
-                                                                        } catch (java.lang.IllegalStateException e) {
-                                                                        } finally {
-                                                                            mpLock.unlock();
+                                                                if (mpLock.tryLock()) {
+                                                                    try {
+                                                                        if (!mp.isPlaying()) {
+                                                                            mp.start();
                                                                         }
+                                                                    } catch (java.lang.IllegalStateException e) {
+                                                                    } finally {
+                                                                        mpLock.unlock();
                                                                     }
-                                                                    thresholdMet = true;
-                                                                    break;
                                                                 }
+                                                                thresholdMet = true;
+                                                                break;
                                                             }
                                                         }
                                                     }
                                                 }
-
                                             }
+
                                         };
                                         if (geocodeResults.size() > 0) {
                                             LocationHelper.calculateRoute(mgp.getCoordinate(), geocodeResults.get(0).getLocation().getCoordinate(), routerListener);

@@ -2,19 +2,6 @@ package edu.rutgers.brange.speedlimitwidget;
 
 import android.widget.Toast;
 
-import com.here.android.mpa.common.GeoBoundingBox;
-import com.here.android.mpa.common.GeoCoordinate;
-import com.here.android.mpa.mapping.Map;
-import com.here.android.mpa.mapping.MapRoute;
-import com.here.android.mpa.routing.RouteOptions;
-import com.here.android.mpa.routing.RoutePlan;
-import com.here.android.mpa.routing.RouteResult;
-import com.here.android.mpa.search.Address;
-import com.here.android.mpa.search.ErrorCode;
-import com.here.android.mpa.search.GeocodeRequest;
-import com.here.android.mpa.search.Location;
-import com.here.android.mpa.search.ResultListener;
-
 import org.junit.Test;
 
 import java.io.BufferedInputStream;

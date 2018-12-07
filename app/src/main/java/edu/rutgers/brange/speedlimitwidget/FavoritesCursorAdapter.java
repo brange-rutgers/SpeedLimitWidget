@@ -43,7 +43,7 @@ public class FavoritesCursorAdapter extends CursorAdapter {
     boolean routeCalculated;
     boolean addressTextSet;
 
-    static final int SPEED_TRAP_THRESHOLD = 20;
+    static final int SPEED_TRAP_THRESHOLD = 14;
 
     public FavoritesCursorAdapter(Context context, Cursor cursor) {
         super(context, cursor, 0);
