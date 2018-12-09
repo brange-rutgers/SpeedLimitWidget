@@ -26,6 +26,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.ImageView;
@@ -113,6 +114,9 @@ public class FloatingViewService extends Service {
     static ElectronicHorizon electronicHorizon;
     static MediaPlayer mp;
 
+    ViewConfiguration viewConfig;
+    int mViewScaledTouchSlop;
+
     public FloatingViewService() {
     }
 
@@ -182,32 +186,41 @@ public class FloatingViewService extends Service {
 
     private void resize(float resizeFactor) {
 
-        final float ratio = 60.f / 40;
+        final float height = 60.f;
+        final float width = 40.f;
 
-        if (true) {
-            // Resize collapsed Speed Limit
-            ViewGroup.LayoutParams speedLimitViewCollapsedLayoutParams = speedLimitViewCollapsed.getLayoutParams();
+        // Resize collapsed Speed Limit
+        ViewGroup.LayoutParams speedLimitViewCollapsedLayoutParams = speedLimitViewCollapsed.getLayoutParams();
+        if (MainActivity.factor * resizeFactor < ResizableLayout.MIN_FACTOR){
+            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MIN_FACTOR;
+            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MIN_FACTOR;
+        } else if (MainActivity.factor * resizeFactor > ResizableLayout.MAX_FACTOR) {
+            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MAX_FACTOR;
+            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MAX_FACTOR;
+        } else {
             speedLimitViewCollapsedLayoutParams.height *= resizeFactor;
             speedLimitViewCollapsedLayoutParams.width *= resizeFactor;
-            speedLimitViewCollapsed.setLayoutParams(speedLimitViewCollapsedLayoutParams);
-
-            // Resize expanded Speed Limit
-            ViewGroup.LayoutParams speedLimitViewExpandedLayoutParams = speedLimitViewExpanded.getLayoutParams();
-            speedLimitViewExpandedLayoutParams.height *= resizeFactor;
-            speedLimitViewExpandedLayoutParams.width *= resizeFactor;
-            speedLimitViewExpanded.setLayoutParams(speedLimitViewExpandedLayoutParams);
-
-            // Resize Speedometer
-            ViewGroup.LayoutParams speedometerViewLayoutParams = speedometerView.getLayoutParams();
-            speedometerViewLayoutParams.height *= resizeFactor;
-            speedometerViewLayoutParams.width *= resizeFactor;
-            speedometerView.setLayoutParams(speedometerViewLayoutParams);
-
-            // Resize and Move TextView
-            float textSizeComplexUnitPx = speedLimitTextViewCollapsed.getTextSize();
-            speedLimitTextViewCollapsed.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
-            speedLimitTextViewExpanded.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
         }
+
+        speedLimitViewCollapsed.setLayoutParams(speedLimitViewCollapsedLayoutParams);
+
+        // Resize expanded Speed Limit
+        ViewGroup.LayoutParams speedLimitViewExpandedLayoutParams = speedLimitViewExpanded.getLayoutParams();
+        speedLimitViewExpandedLayoutParams.height *= resizeFactor;
+        speedLimitViewExpandedLayoutParams.width *= resizeFactor;
+        speedLimitViewExpanded.setLayoutParams(speedLimitViewExpandedLayoutParams);
+
+        // Resize Speedometer
+        ViewGroup.LayoutParams speedometerViewLayoutParams = speedometerView.getLayoutParams();
+        speedometerViewLayoutParams.height *= resizeFactor;
+        speedometerViewLayoutParams.width *= resizeFactor;
+        speedometerView.setLayoutParams(speedometerViewLayoutParams);
+
+        // Resize and Move TextView
+        float textSizeComplexUnitPx = speedLimitTextViewCollapsed.getTextSize();
+        speedLimitTextViewCollapsed.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+        speedLimitTextViewExpanded.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+
     }
 
     @Override
@@ -225,16 +238,9 @@ public class FloatingViewService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        //Inflate the floating view layout we created
-        LayoutInflater layoutInflater = LayoutInflater.from(this);
-        mFloatingView = layoutInflater.inflate(R.layout.layout_floating_widget, null);
-        speedometerView = mFloatingView.findViewById(R.id.speedometer);
-        speedLimitViewCollapsed = mFloatingView.findViewById(R.id.collapsed_view_speed_limit);
-        speedLimitViewExpanded = mFloatingView.findViewById(R.id.expanded_view_speed_limit);
-        speedLimitTextViewExpanded = speedLimitViewExpanded.findViewById(R.id.speed_limit_text);
-        speedLimitTextViewCollapsed = speedLimitViewCollapsed.findViewById(R.id.speed_limit_text);
 
-        init(this);
+        init();
+
         if (MainActivity.initSettings()) {
             resize(MainActivity.factor);
         } else {
@@ -301,16 +307,6 @@ public class FloatingViewService extends Service {
             private float mSecStartTouchEventY = -1;
             private float mPrimSecStartTouchDistance = 0;
 
-            Coordinate getRawXY(final View v, final MotionEvent event, int actionIndex) {
-
-                int rawX, rawY;
-                final int location[] = {0, 0};
-                v.getLocationOnScreen(location);
-                rawX = (int) event.getX(actionIndex) + location[0];
-                rawY = (int) event.getY(actionIndex) + location[1];
-                return new Coordinate(rawX, rawY);
-            }
-
             public float distance(MotionEvent event, int first, int second) {
                 if (event.getPointerCount() >= 2) {
                     final float x = event.getX(first) - event.getX(second);
@@ -320,6 +316,22 @@ public class FloatingViewService extends Service {
                 } else {
                     return 0;
                 }
+            }
+
+            private float getPinchFactor(View v, MotionEvent event){
+
+                final float difInitX = mSecStartTouchEventX - mPrimStartTouchEventX;
+                final float difInitY = mSecStartTouchEventY - mPrimStartTouchEventY;
+                final double distanceInit = Math.sqrt(Math.pow(difInitX,2)+Math.pow(difInitY,2));
+                final float difEndX = event.getX(1) - event.getX(0);
+                final float difEndY = event.getY(1) - event.getY(0);
+                final double distanceEnd = Math.sqrt(Math.pow(difEndX,2) + Math.pow(difEndY,2));
+
+                int height = v.getHeight();
+                int width = v.getWidth();
+                double diagonal = Math.sqrt(Math.pow(height,2)+Math.pow(width,2));
+                float resizeFactor = (float)((diagonal + (distanceEnd-distanceInit)) / diagonal);
+                return resizeFactor;
             }
 
             private boolean isPinchGesture(MotionEvent event) {
@@ -332,7 +344,9 @@ public class FloatingViewService extends Service {
 
                     if (// if the distance between the two fingers has increased past
                         // our threshold
-                            (diffPrimY * diffSecY) <= 0
+                            Math.abs(distanceCurrent - mPrimSecStartTouchDistance) > mViewScaledTouchSlop
+                                    // and the fingers are moving in opposing directions
+                                    && (diffPrimY * diffSecY) <= 0
                                     && (diffPrimX * diffSecX) <= 0) {
                         return true;
                     }
@@ -345,107 +359,100 @@ public class FloatingViewService extends Service {
             public boolean onTouch(View v, MotionEvent event) {
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
-
-                        // Touch start time
-                        startTime = System.currentTimeMillis();
-
-                        //remember the initial position.
-                        initialX = params.x;
-                        initialY = params.y;
-
-                        //get the touch location
-                        initialTouchX = event.getRawX();
-                        initialTouchY = event.getRawY();
-
-
-                        if (event.getPointerCount() == 1) {
-                            mPrimStartTouchEventX = event.getX(0);
-                            mPrimStartTouchEventY = event.getY(0);
-                            Log.d("TAG", String.format("POINTER ONE X = %.5f, Y = %.5f", mPrimStartTouchEventX, mPrimStartTouchEventY));
-                        }
-                        if (event.getPointerCount() == 2) {
-                            // Starting distance between fingers
-                            mSecStartTouchEventX = event.getX(1);
-                            mSecStartTouchEventY = event.getY(1);
-                            mPrimSecStartTouchDistance = distance(event, 0, 1);
-                            Log.d("TAG", String.format("POINTER TWO X = %.5f, Y = %.5f", mSecStartTouchEventX, mSecStartTouchEventY));
-                        }
-
+                        startDown(event);
                         return false;
                     case MotionEvent.ACTION_POINTER_DOWN:
                         return false;
                     case MotionEvent.ACTION_UP:
-
-                        // TouchEnd Time
-                        deltaTime = (System.currentTimeMillis() - startTime);
-
-                        int Xdiff = (int) (event.getRawX() - initialTouchX);
-                        int Ydiff = (int) (event.getRawY() - initialTouchY);
-
-                        //The check for Xdiff <10 && YDiff< 10 because sometime elements moves a little while clicking.
-                        //So that is click event.
-                        if (Xdiff < 10 && Ydiff < 10) {
-                            if (deltaTime > LONG_PRESS_TIME) {
-                                startMainActivity();
-                            } else {
-                                swapView();
-                            }
-                        }
-
-                        if (event.getPointerCount() < 2) {
-                            mSecStartTouchEventX = -1;
-                            mSecStartTouchEventY = -1;
-                        }
-                        if (event.getPointerCount() < 1) {
-                            mPrimStartTouchEventX = -1;
-                            mPrimStartTouchEventY = -1;
-                        }
-
+                        startUp(event);
                         return false;
                     case MotionEvent.ACTION_POINTER_UP:
-                        Coordinate initialPrimaryTouch = new Coordinate(initialX, initialY);
-                        Coordinate endPrimaryTouch = new Coordinate(event.getRawX(), event.getRawY());
-                        Coordinate secondaryTouch;
-                        int pointerCount = event.getPointerCount();
-                        if (pointerCount > 1) {
-                            Coordinate rawPointerPostion = getRawXY(v, event, 1);
-                            float posX = rawPointerPostion.x;
-                            float posY = rawPointerPostion.y;
-                            secondaryTouch = new Coordinate(posX, posY);
-                        } else {
-                            return false;
-                        }
-                        float rawX = event.getRawX();
-                        float dragDiff = Math.abs(rawX - initialTouchX);
-                        if (isCloser(secondaryTouch, initialPrimaryTouch, endPrimaryTouch)) {
-
-                        } else {
-                            dragDiff *= -1;
-                        }
-                        int width = v.getWidth();
-                        float resizeFactor = (width + dragDiff) / width;
-                        resize(resizeFactor);
-                        MainActivity.updateSettings(resizeFactor, MainActivity.posX, MainActivity.posY);
                         return false;
                     case MotionEvent.ACTION_MOVE:
-                        //Calculate the X and Y coordinates of the view.
-                        params.x = initialX + getDx(event);
-                        params.y = initialY + (int) (event.getRawY() - initialTouchY);
-
-                        MainActivity.updateSettings(1, params.x, params.y);
-
-                        //Update the layout with new X & Y coordinate
-                        mWindowManager.updateViewLayout(mFloatingView, params);
-
-                        if (isPinchGesture(event)) {
-                            return false;
-                        }
-
+                        startMove(v, event);
                         return false;
                 }
                 return false;
             }
 
+            static final int MOVE_THRESHOLD = 10;
+            boolean resized;
+            void startMove(View v, MotionEvent event) {
+                if (isPinchGesture(event)) {
+                    float resizeFactor = getPinchFactor(v,event);
+                    resize(resizeFactor);
+                    resized = true;
+                    MainActivity.updateSettings(resizeFactor, MainActivity.posX, MainActivity.posY);
+                } else {
+                    //Calculate the X and Y coordinates of the view.
+                    params.x = initialX + getDx(event);
+                    params.y = initialY + (int) (event.getRawY() - initialTouchY);
+
+                    MainActivity.updateSettings(1, params.x, params.y);
+
+                    //Update the layout with new X & Y coordinate
+                    mWindowManager.updateViewLayout(mFloatingView, params);
+
+                }
+            }
+
+            void startUp(MotionEvent event) {
+
+                if (event.getPointerCount() < 2) {
+                    mSecStartTouchEventX = -1;
+                    mSecStartTouchEventY = -1;
+                }
+                if (event.getPointerCount() < 1) {
+                    mPrimStartTouchEventX = -1;
+                    mPrimStartTouchEventY = -1;
+                }
+
+                // TouchEnd Time
+                deltaTime = (System.currentTimeMillis() - startTime);
+
+                int Xdiff = (int) (event.getRawX() - initialTouchX);
+                int Ydiff = (int) (event.getRawY() - initialTouchY);
+
+                //The check for Xdiff <10 && YDiff< 10 because sometime elements moves a little while clicking.
+                //So that is click event.
+                if (!resized &&
+                        Xdiff < MOVE_THRESHOLD && Ydiff < MOVE_THRESHOLD) {
+
+                    if (deltaTime > LONG_PRESS_TIME) {
+                        startMainActivity();
+                    } else {
+                        swapView();
+                    }
+                }
+
+                resized = false;
+            }
+
+            void startDown(MotionEvent event) {
+                // Touch start time
+                startTime = System.currentTimeMillis();
+
+                //remember the initial position.
+                initialX = params.x;
+                initialY = params.y;
+
+                //get the touch location
+                initialTouchX = event.getRawX();
+                initialTouchY = event.getRawY();
+
+                if (event.getPointerCount() == 1) {
+                    mPrimStartTouchEventX = event.getX(0);
+                    mPrimStartTouchEventY = event.getY(0);
+                    Log.d("TAG", String.format("POINTER ONE X = %.5f, Y = %.5f", mPrimStartTouchEventX, mPrimStartTouchEventY));
+                }
+                if (event.getPointerCount() == 2) {
+                    // Starting distance between fingers
+                    mSecStartTouchEventX = event.getX(1);
+                    mSecStartTouchEventY = event.getY(1);
+                    mPrimSecStartTouchDistance = distance(event, 0, 1);
+                    Log.d("TAG", String.format("POINTER TWO X = %.5f, Y = %.5f", mSecStartTouchEventX, mSecStartTouchEventY));
+                }
+            }
         });
 
         startLocationUpdates();
@@ -597,7 +604,20 @@ public class FloatingViewService extends Service {
         speedLimitTextViewExpanded.setText(currentSpeedLimitText);
     }
 
-    private void init(Context context) {
+    private void init() {
+
+        //Inflate the floating view layout we created
+        LayoutInflater layoutInflater = LayoutInflater.from(this);
+        mFloatingView = layoutInflater.inflate(R.layout.layout_floating_widget, null);
+        speedometerView = mFloatingView.findViewById(R.id.speedometer);
+        speedLimitViewCollapsed = mFloatingView.findViewById(R.id.collapsed_view_speed_limit);
+        speedLimitViewExpanded = mFloatingView.findViewById(R.id.expanded_view_speed_limit);
+        speedLimitTextViewExpanded = speedLimitViewExpanded.findViewById(R.id.speed_limit_text);
+        speedLimitTextViewCollapsed = speedLimitViewCollapsed.findViewById(R.id.speed_limit_text);
+
+        viewConfig = ViewConfiguration.get(this);
+        mViewScaledTouchSlop = viewConfig.getScaledTouchSlop();
+
         mp = MediaPlayer.create(this, R.raw.crash_x);
         mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             public void onCompletion(MediaPlayer mp) {
@@ -605,7 +625,7 @@ public class FloatingViewService extends Service {
             }
         });
         viewState = 0;
-        mScaleDetector = new ScaleGestureDetector(context, new ScaleListener());
+        mScaleDetector = new ScaleGestureDetector(this, new ScaleListener());
     }
 
     private void startMapDataPrefetcher() {

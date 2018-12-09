@@ -46,7 +46,7 @@
                 android:layout_width="@dimen/speedometer_size"
                 android:layout_height="@dimen/speedometer_size"
                 android:layout_gravity="center_vertical"
-                android:layout_marginLeft="@dimen/speedometer_margin"
+                android:layout_marginStart="@dimen/speedometer_margin"
                 tools:ignore="ContentDescription" />
         </LinearLayout>
     </edu.rutgers.brange.speedlimitwidget.ResizableLayout>

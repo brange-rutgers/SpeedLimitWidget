@@ -3,15 +3,17 @@ package edu.rutgers.brange.speedlimitwidget;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.util.AttributeSet;
-import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.ScaleGestureDetector;
-import android.view.View;
 import android.widget.RelativeLayout;
 
 public class ResizableLayout extends RelativeLayout {
     private ScaleGestureDetector mScaleDetector;
     private float mScaleFactor = 1.f;
+
+    static final float MIN_FACTOR = 1.f;
+    static final float MAX_FACTOR = 4.0f;
+
 
     public ResizableLayout(Context context) {
         super(context);
@@ -63,7 +65,7 @@ public class ResizableLayout extends RelativeLayout {
             mScaleFactor *= detector.getScaleFactor();
 
             // Don't let the object get too small or too large.
-            mScaleFactor = Math.max(0.1f, Math.min(mScaleFactor, 5.0f));
+            mScaleFactor = Math.max(MIN_FACTOR, Math.min(mScaleFactor, MAX_FACTOR));
 
             invalidate();
             return true;

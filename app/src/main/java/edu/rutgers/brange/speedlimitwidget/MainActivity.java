@@ -44,6 +44,9 @@ public class MainActivity extends AppCompatActivity {
     static double averageDelta;
     static TextView statisticsTextView;
 
+    static float factor = 2;
+    static int posX, posY;
+
     static void initDbs(Context context) {
         dbHelper = new SpeedLimitWidgetDbHelper(context);
         db = dbHelper.getWritableDatabase();
@@ -108,6 +111,63 @@ public class MainActivity extends AppCompatActivity {
             }
             default:
                 super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        }
+    }
+
+    static boolean initSettings(){
+        db.delete(SettingsContract.ContractEntry.TABLE_NAME,_ID + ">1",null);
+
+        String query = "SELECT * " +
+                " FROM " + SettingsContract.ContractEntry.TABLE_NAME;
+
+        Cursor cursor = db.rawQuery(query, null);
+        int count = cursor.getCount();
+        if (count > 0) {
+            cursor.moveToFirst();
+
+            factor = cursor.getFloat(cursor.getColumnIndexOrThrow(SettingsContract.ContractEntry.COLUMN_NAME_FACTOR));
+            posX = cursor.getInt(cursor.getColumnIndexOrThrow(SettingsContract.ContractEntry.COLUMN_NAME_X));
+            posY = cursor.getInt(cursor.getColumnIndexOrThrow(SettingsContract.ContractEntry.COLUMN_NAME_Y));
+
+            if (factor < ResizableLayout.MIN_FACTOR){
+                factor = ResizableLayout.MIN_FACTOR;
+                updateSettings(1,posX,posY);
+            } else if (factor > ResizableLayout.MAX_FACTOR){
+                factor = ResizableLayout.MAX_FACTOR;
+                updateSettings(1,posX,posY);
+            }
+
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    static void updateSettings(float factor, int x, int y){
+        if (MainActivity.factor * factor < ResizableLayout.MIN_FACTOR){
+            MainActivity.factor = ResizableLayout.MIN_FACTOR;
+        } else if (MainActivity.factor * factor > ResizableLayout.MAX_FACTOR) {
+            MainActivity.factor = ResizableLayout.MAX_FACTOR;
+        }else {
+            MainActivity.factor *= factor;
+        }
+        posX = x;
+        posY = y;
+
+        ContentValues cv = new ContentValues();
+        cv.put(SettingsContract.ContractEntry.COLUMN_NAME_FACTOR,MainActivity.factor);
+        cv.put(SettingsContract.ContractEntry.COLUMN_NAME_X,posX);
+        cv.put(SettingsContract.ContractEntry.COLUMN_NAME_Y,posY);
+
+        int numRows;
+        String whereClause = _ID + "=1";
+        numRows = db.update(SettingsContract.ContractEntry.TABLE_NAME, cv, whereClause, null);
+        if (numRows > 0) {
+        } else {
+            long id = db.insert(SettingsContract.ContractEntry.TABLE_NAME, null, cv);
+            if (id == 0){
+                return;
+            }
         }
     }
 
