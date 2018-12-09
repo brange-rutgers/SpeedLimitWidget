@@ -7,17 +7,13 @@ import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
-import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.media.MediaPlayer;
 import android.os.Build;
-import android.os.Bundle;
 import android.os.IBinder;
-import android.os.Looper;
 import android.support.annotation.NonNull;
-import android.support.constraint.ConstraintLayout;
 import android.support.v4.content.ContextCompat;
 import android.util.Log;
 import android.util.TypedValue;
@@ -29,12 +25,10 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.WindowManager;
-import android.widget.ImageView;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.tasks.OnFailureListener;
 import com.google.android.gms.tasks.OnSuccessListener;
 import com.here.android.mpa.common.ApplicationContext;
@@ -63,16 +57,9 @@ import com.here.android.mpa.search.GeocodeRequest2;
 import com.here.android.mpa.search.GeocodeResult;
 import com.here.android.mpa.search.ResultListener;
 
-import java.io.BufferedInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.lang.ref.WeakReference;
-import java.net.HttpURLConnection;
-import java.net.URL;
 import java.sql.Timestamp;
 import java.util.ArrayList;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -538,7 +525,7 @@ public class FloatingViewService extends Service {
         }
     }
 
-    static MatchedGeoPosition lastMgp;
+    static MatchedGeoPosition lastPosition;
 
     private void initSDK() {
         final ApplicationContext appContext = new ApplicationContext(getApplicationContext());
@@ -850,10 +837,10 @@ public class FloatingViewService extends Service {
     static boolean calculating = false;
     ReentrantLock lock = new ReentrantLock();
 
-    private void getSpeedTrap(final MatchedGeoPosition mgp) {
+    private void getSpeedTrap(final MatchedGeoPosition currentPosition) {
         final double DESIRED_DISTANCE = 100;
 
-        RoadElement roadElement = mgp.getRoadElement();
+        RoadElement roadElement = currentPosition.getRoadElement();
 
         if (roadElement == null) {
 
@@ -864,17 +851,15 @@ public class FloatingViewService extends Service {
             ArrayList<GeoCoordinate> enRoute = new ArrayList<>();
             int index = -1;
             double greatestDistance = -1;
-            int closerCount = 0;
 
-            if (lastMgp == null) {
+            if (lastPosition == null) {
 
             } else {
                 List<GeoCoordinate> geometry = roadElement.getGeometry();
                 for (int i = 0; i < geometry.size(); i++) {
-                    if (LocationHelper.isCloser(geometry.get(i), mgp.getCoordinate(), lastMgp.getCoordinate())) {
-                        closerCount++;
+                    if (LocationHelper.isCloser(geometry.get(i), currentPosition.getCoordinate(), lastPosition.getCoordinate())) {
                         enRoute.add(geometry.get(i));
-                        double dist = LocationHelper.distance(geometry.get(i), mgp.getCoordinate());
+                        double dist = LocationHelper.distance(geometry.get(i), currentPosition.getCoordinate());
                         if (dist > greatestDistance) {
                             index = enRoute.size() - 1;
                             greatestDistance = dist;
@@ -883,8 +868,8 @@ public class FloatingViewService extends Service {
                 }
             }
 
-            if (lastMgp == null || LocationHelper.distance(lastMgp.getCoordinate(), mgp.getCoordinate()) > 0) {
-                lastMgp = mgp;
+            if (lastPosition == null || LocationHelper.distance(lastPosition.getCoordinate(), currentPosition.getCoordinate()) > 0) {
+                lastPosition = currentPosition;
             }
 
             if (roadName.equals("")) {
@@ -892,23 +877,26 @@ public class FloatingViewService extends Service {
             } else if (index > -1) {
                 double enRouteLatitude = enRoute.get(index).getLatitude();
                 double enRouteLongitude = enRoute.get(index).getLongitude();
-                double mgpLatitude = mgp.getCoordinate().getLatitude();
-                double mgpLongitude = mgp.getCoordinate().getLongitude();
-                double angle = Math.atan((enRouteLatitude - mgpLatitude) / (enRouteLongitude - mgpLongitude));
-                final GeoCoordinate newGeoCoordinate = LocationHelper.getGeoCoordinateFromPositionDistanceBearing(
-                        mgp.getCoordinate(),
+                double currentLatitude = currentPosition.getCoordinate().getLatitude();
+                double currentLongitude = currentPosition.getCoordinate().getLongitude();
+                double angle = Math.atan((enRouteLatitude - currentLatitude) / (enRouteLongitude - currentLongitude));
+
+                final GeoCoordinate projectedCoordinate = LocationHelper.getGeoCoordinateFromPositionDistanceBearing(
+                        currentPosition.getCoordinate(),
                         DESIRED_DISTANCE,
                         Math.toDegrees(angle));
-                double dist = LocationHelper.distance(mgp.getCoordinate(), newGeoCoordinate);
+
+                // dist should approximately be equal to DESIRED_DISTANCE
+                double dist = LocationHelper.distance(currentPosition.getCoordinate(), projectedCoordinate);
+
                 GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(roadName);
                 try {
-                    geocodeRequest2.setSearchArea(newGeoCoordinate, (int) DESIRED_DISTANCE);
-                    int size = geocodeRequest2.getCollectionSize();
+                    geocodeRequest2.setSearchArea(projectedCoordinate, (int) DESIRED_DISTANCE);
                     if (lock.tryLock()) {
                         try {
                             if (!calculating) {
                                 calculating = true;
-                                double mgpSpeedLimit = mgp.getRoadElement().getSpeedLimit();
+                                final double currentSpeedLimit = currentPosition.getRoadElement().getSpeedLimit();
                                 geocodeRequest2.execute(new ResultListener<List<GeocodeResult>>() {
                                     @Override
                                     public void onCompleted(List<GeocodeResult> geocodeResults, ErrorCode errorCode) {
@@ -928,16 +916,21 @@ public class FloatingViewService extends Service {
                                                     List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
                                                     boolean thresholdMet = false;
                                                     if (routeElements.size() > 1) {
-                                                        float lastSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
+
+                                                        float closestSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
+
                                                         for (int i = 1; i < routeElements.size(); i++) {
-                                                            double dist = routeElements.get(i).getGeometry().get(0).distanceTo(mgp.getCoordinate());
-                                                            double speedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
-                                                            double delta = lastSpeedLimit - speedLimit;
+                                                            double dist = routeElements.get(i).getGeometry().get(0).distanceTo(currentPosition.getCoordinate());
+                                                            double nextSpeedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
+                                                            double delta = closestSpeedLimit - nextSpeedLimit;
                                                             delta = LocationHelper.meterPerSecToMilesPerHour(delta);
-                                                            String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(speedLimit), delta);
+                                                            String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(nextSpeedLimit), delta);
                                                             System.out.println(msg);
-                                                            if (speedLimit > 0 &&
-                                                                    delta > SPEED_TRAP_THRESHOLD) {
+
+                                                            if (nextSpeedLimit > 0 &&
+                                                                    (delta > SPEED_TRAP_THRESHOLD ||
+                                                                    currentSpeedLimit - nextSpeedLimit > SPEED_TRAP_THRESHOLD)) {
+
                                                                 Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
 
                                                                 if (mpLock.tryLock()) {
@@ -946,6 +939,7 @@ public class FloatingViewService extends Service {
                                                                             mp.start();
                                                                         }
                                                                     } catch (java.lang.IllegalStateException e) {
+                                                                        Toast.makeText(getApplicationContext(),"couldn't play wav file",Toast.LENGTH_SHORT).show();;
                                                                     } finally {
                                                                         mpLock.unlock();
                                                                     }
@@ -960,7 +954,7 @@ public class FloatingViewService extends Service {
 
                                         };
                                         if (geocodeResults.size() > 0) {
-                                            LocationHelper.calculateRoute(mgp.getCoordinate(), geocodeResults.get(0).getLocation().getCoordinate(), routerListener);
+                                            LocationHelper.calculateRoute(currentPosition.getCoordinate(), geocodeResults.get(0).getLocation().getCoordinate(), routerListener);
                                         }
                                         return;
                                     }
