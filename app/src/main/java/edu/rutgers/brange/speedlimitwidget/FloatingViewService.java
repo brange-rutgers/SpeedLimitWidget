@@ -49,6 +49,7 @@ import com.here.android.mpa.prefetcher.MapDataPrefetcher;
 import com.here.android.mpa.routing.Maneuver;
 import com.here.android.mpa.routing.Route;
 import com.here.android.mpa.routing.RouteElement;
+import com.here.android.mpa.routing.RouteElements;
 import com.here.android.mpa.routing.RouteResult;
 import com.here.android.mpa.routing.Router;
 import com.here.android.mpa.routing.RoutingError;
@@ -104,122 +105,17 @@ public class FloatingViewService extends Service {
     ViewConfiguration viewConfig;
     int mViewScaledTouchSlop;
 
-    public FloatingViewService() {
-    }
+    boolean favoriteAdded = false;
 
     private boolean fetchingDataInProgress = false;
     private Tuple<GeoCoordinate, java.sql.Timestamp> mostRecentFavorite;
 
-    static void stopServices(Context context) {
-        stopLocationUpdates(context);
-        stopManagersAndListeners();
-    }
-
-    private boolean isCloser(Coordinate init, Coordinate c1, Coordinate c2) {
-        return isCloser(init.getX(), init.getY(), c1.getX(), c1.getY(), c2.getX(), c2.getY());
-    }
-
-    private boolean isCloser(float xInit, float yInit, float x1, float y1, float x2, float y2) {
-        float distance1 = (float) Math.sqrt(Math.pow(xInit - x1, 2) + Math.pow(yInit - y1, 2));
-        float distance2 = (float) Math.sqrt(Math.pow(xInit - x2, 2) + Math.pow(yInit - y2, 2));
-        return distance1 < distance2;
-    }
-
-    static void stopLocationUpdates(Context context) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-
-            // TODO: Consider calling
-            //    ActivityCompat#requestPermissions
-            // here to request the missing permissions, and then overriding
-            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
-            //                                          int[] grantResults)
-            // to handle the case where the user grants the permission. See the documentation
-            // for ActivityCompat#requestPermissions for more details.
-            return;
-        }
-
-
-        locationManager.removeUpdates(locationListener);
-    }
-
-    static void stopManagersAndListeners() {
-        try {
-            stopPositioningManager();
-            stopMapDataPrefetcher();
-            stopNavigationManager();
-        } catch (Exception e) {
-
-        }
-    }
-
-    static void stopPositioningManager() {
-        positioningManager.removeListener(positionListener);
-        positionListener = null;
-        positioningManager.stop();
-        positioningManager = null;
-    }
-
-    static void stopNavigationManager() {
-        navigationManager.getInstance().stop();
-        navigationManager = null;
-    }
-
-    static void stopMapDataPrefetcher() {
-        mapDataPrefetcher.removeListener(prefetcherListener);
-        prefetcherListener = null;
-        mapDataPrefetcher = null;
-    }
-
-    private void resize(float resizeFactor) {
-
-        final float height = 60.f;
-        final float width = 40.f;
-
-        // Resize collapsed Speed Limit
-        ViewGroup.LayoutParams speedLimitViewCollapsedLayoutParams = speedLimitViewCollapsed.getLayoutParams();
-        if (MainActivity.factor * resizeFactor < ResizableLayout.MIN_FACTOR){
-            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MIN_FACTOR;
-            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MIN_FACTOR;
-        } else if (MainActivity.factor * resizeFactor > ResizableLayout.MAX_FACTOR) {
-            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MAX_FACTOR;
-            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MAX_FACTOR;
-        } else {
-            speedLimitViewCollapsedLayoutParams.height *= resizeFactor;
-            speedLimitViewCollapsedLayoutParams.width *= resizeFactor;
-        }
-
-        speedLimitViewCollapsed.setLayoutParams(speedLimitViewCollapsedLayoutParams);
-
-        // Resize expanded Speed Limit
-        ViewGroup.LayoutParams speedLimitViewExpandedLayoutParams = speedLimitViewExpanded.getLayoutParams();
-        speedLimitViewExpandedLayoutParams.height *= resizeFactor;
-        speedLimitViewExpandedLayoutParams.width *= resizeFactor;
-        speedLimitViewExpanded.setLayoutParams(speedLimitViewExpandedLayoutParams);
-
-        // Resize Speedometer
-        ViewGroup.LayoutParams speedometerViewLayoutParams = speedometerView.getLayoutParams();
-        speedometerViewLayoutParams.height *= resizeFactor;
-        speedometerViewLayoutParams.width *= resizeFactor;
-        speedometerView.setLayoutParams(speedometerViewLayoutParams);
-
-        // Resize and Move TextView
-        float textSizeComplexUnitPx = speedLimitTextViewCollapsed.getTextSize();
-        speedLimitTextViewCollapsed.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
-        speedLimitTextViewExpanded.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
-
+    public FloatingViewService() {
     }
 
     @Override
     public IBinder onBind(Intent intent) {
         return null;
-    }
-
-    private static Tuple<Double, Long> updateAverage(Tuple<Double, Long> currentAverage, double nextSample) {
-        double speedTotal = currentAverage.x * currentAverage.y + nextSample;
-        long newNumSamples = currentAverage.y + 1;
-        double newAverage = speedTotal / (newNumSamples);
-        return new Tuple<>(newAverage, newNumSamples);
     }
 
     @Override
@@ -445,7 +341,118 @@ public class FloatingViewService extends Service {
         startLocationUpdates();
     }
 
-    boolean favoriteAdded = false;
+    private static Tuple<Double, Long> updateAverage(Tuple<Double, Long> currentAverage, double nextSample) {
+        double speedTotal = currentAverage.x * currentAverage.y + nextSample;
+        long newNumSamples = currentAverage.y + 1;
+        double newAverage = speedTotal / (newNumSamples);
+        return new Tuple<>(newAverage, newNumSamples);
+    }
+
+    static void stopServices(Context context) {
+        stopLocationUpdates(context);
+        stopManagersAndListeners();
+    }
+
+    static void stopLocationUpdates(Context context) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+
+            // TODO: Consider calling
+            //    ActivityCompat#requestPermissions
+            // here to request the missing permissions, and then overriding
+            //   public void onRequestPermissionsResult(int requestCode, String[] permissions,
+            //                                          int[] grantResults)
+            // to handle the case where the user grants the permission. See the documentation
+            // for ActivityCompat#requestPermissions for more details.
+            return;
+        }
+
+
+        locationManager.removeUpdates(locationListener);
+    }
+
+    static void stopManagersAndListeners() {
+        try {
+            stopPositioningManager();
+            stopMapDataPrefetcher();
+            stopNavigationManager();
+        } catch (Exception e) {
+
+        }
+    }
+
+    static void stopPositioningManager() {
+        positioningManager.removeListener(positionListener);
+        positionListener = null;
+        positioningManager.stop();
+        positioningManager = null;
+    }
+
+    static void stopNavigationManager() {
+        navigationManager.getInstance().stop();
+        navigationManager = null;
+    }
+
+    static void stopMapDataPrefetcher() {
+        mapDataPrefetcher.removeListener(prefetcherListener);
+        prefetcherListener = null;
+        mapDataPrefetcher = null;
+    }
+
+    @Override
+    public void onDestroy() {
+        deInit();
+        super.onDestroy();
+    }
+
+    private boolean isCloser(Coordinate init, Coordinate c1, Coordinate c2) {
+        return isCloser(init.getX(), init.getY(), c1.getX(), c1.getY(), c2.getX(), c2.getY());
+    }
+
+    private boolean isCloser(float xInit, float yInit, float x1, float y1, float x2, float y2) {
+        float distance1 = (float) Math.sqrt(Math.pow(xInit - x1, 2) + Math.pow(yInit - y1, 2));
+        float distance2 = (float) Math.sqrt(Math.pow(xInit - x2, 2) + Math.pow(yInit - y2, 2));
+        return distance1 < distance2;
+    }
+
+    private void resize(float resizeFactor) {
+
+        final float height = 60.f;
+        final float width = 40.f;
+
+        // Resize collapsed Speed Limit
+        ViewGroup.LayoutParams speedLimitViewCollapsedLayoutParams = speedLimitViewCollapsed.getLayoutParams();
+        if (MainActivity.factor * resizeFactor < ResizableLayout.MIN_FACTOR) {
+            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MIN_FACTOR;
+            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MIN_FACTOR;
+        } else if (MainActivity.factor * resizeFactor > ResizableLayout.MAX_FACTOR) {
+            speedLimitViewCollapsedLayoutParams.height *= ResizableLayout.MAX_FACTOR;
+            speedLimitViewCollapsedLayoutParams.width *= ResizableLayout.MAX_FACTOR;
+        } else {
+            speedLimitViewCollapsedLayoutParams.height *= resizeFactor;
+            speedLimitViewCollapsedLayoutParams.width *= resizeFactor;
+        }
+
+        speedLimitViewCollapsed.setLayoutParams(speedLimitViewCollapsedLayoutParams);
+
+        // Resize expanded Speed Limit
+        ViewGroup.LayoutParams speedLimitViewExpandedLayoutParams = speedLimitViewExpanded.getLayoutParams();
+        speedLimitViewExpandedLayoutParams.height *= resizeFactor;
+        speedLimitViewExpandedLayoutParams.width *= resizeFactor;
+        speedLimitViewExpanded.setLayoutParams(speedLimitViewExpandedLayoutParams);
+
+        // Resize Speedometer
+        ViewGroup.LayoutParams speedometerViewLayoutParams = speedometerView.getLayoutParams();
+        speedometerViewLayoutParams.height *= resizeFactor;
+        speedometerViewLayoutParams.width *= resizeFactor;
+        speedometerView.setLayoutParams(speedometerViewLayoutParams);
+
+        // Resize and Move TextView
+        float textSizeComplexUnitPx = speedLimitTextViewCollapsed.getTextSize();
+        speedLimitTextViewCollapsed.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+        speedLimitTextViewExpanded.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizeComplexUnitPx * resizeFactor);
+
+    }
 
     void startMainActivity() {
         //Open the application  click.
@@ -566,15 +573,8 @@ public class FloatingViewService extends Service {
         }
     }
 
-    @Override
-    public void onDestroy() {
-        super.onDestroy();
-        if (mFloatingView != null) mWindowManager.removeView(mFloatingView);
-        //getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-    }
-
     private void updateCurrentSpeedLimitView(int currentSpeedLimit) {
-
+        //System.out.println("Speed Limit: " + currentSpeedLimit);
         String currentSpeedLimitText;
 
         if (currentSpeedLimit > 0) {
@@ -608,11 +608,19 @@ public class FloatingViewService extends Service {
         mp = MediaPlayer.create(this, R.raw.crash_x);
         mp.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
             public void onCompletion(MediaPlayer mp) {
-                mp.release();
+                mp.reset();
             }
         });
         viewState = 0;
         mScaleDetector = new ScaleGestureDetector(this, new ScaleListener());
+    }
+
+    private void deInit() {
+        if (mFloatingView != null) mWindowManager.removeView(mFloatingView);
+        if (mp != null) {
+            mp.stop();
+            mp.release();
+        }
     }
 
     private void startMapDataPrefetcher() {
@@ -632,8 +640,6 @@ public class FloatingViewService extends Service {
                 public void onPositionUpdated(PositioningManager.LocationMethod locationMethod,
                                               GeoPosition geoPosition, boolean b) {
 
-                    // TODO GeoCode -> get locations on street, get locations in direction moving, route to end of the street, step through route
-
                     if (positioningManager.getRoadElement() == null && !fetchingDataInProgress) {
                         GeoBoundingBox areaAround = new GeoBoundingBox(geoPosition.getCoordinate(), 500, 500);
                         mapDataPrefetcher.fetchMapData(areaAround);
@@ -647,7 +653,7 @@ public class FloatingViewService extends Service {
 
                         int currentSpeedLimitTransformed = 0;
                         double currentSpeedmps = mgp.getSpeed();
-                        int currentSpeed = (int) LocationHelper.meterPerSecToMilesPerHour(currentSpeedmps);
+                        int currentSpeed = (int) LocationHelper.metersPerSecToMilesPerHour(currentSpeedmps);
 
                         if (mgp.getRoadElement() != null) {
 
@@ -659,14 +665,14 @@ public class FloatingViewService extends Service {
                             String msg = "New Matched Geo Position Update: " +
                                     mgp.getRoadElement().getRoadName() +
                                     "(" +
-                                    LocationHelper.meterPerSecToMilesPerHour(currentSpeedLimit)
+                                    LocationHelper.metersPerSecToMilesPerHour(currentSpeedLimit)
                                     +
                                     "mph)";
 
                             //Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show();
 
                             currentSpeedLimitTransformed = LocationHelper.mapMilesPerHour(
-                                    LocationHelper.meterPerSecToMilesPerHour(currentSpeedLimit));
+                                    LocationHelper.metersPerSecToMilesPerHour(currentSpeedLimit));
                         } else {
                             String msg = "getRoadElement is null";
                             Toast.makeText(getBaseContext(), msg, Toast.LENGTH_SHORT).show();
@@ -703,7 +709,7 @@ public class FloatingViewService extends Service {
         double speed = geoPosition.getSpeed();
         double speedLimit =
                 geoPosition.getRoadElement().getSpeedLimit();
-        double delta = LocationHelper.meterPerSecToMilesPerHour(speedLimit - speed);
+        double delta = LocationHelper.metersPerSecToMilesPerHour(speedLimit - speed);
 
         if (Math.abs(delta) > 88 &&
                 Math.abs(delta) < 200) {
@@ -717,10 +723,10 @@ public class FloatingViewService extends Service {
                 MainActivity.updateSpeedAverage(newAverage.x, newAverage.y);
             }
 
-            updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(speed), 0);
+            updateCurrentSpeedView((int) LocationHelper.metersPerSecToMilesPerHour(speed), 0);
 
         } else {
-            updateCurrentSpeedView((int) LocationHelper.meterPerSecToMilesPerHour(0), 0);
+            updateCurrentSpeedView((int) LocationHelper.metersPerSecToMilesPerHour(0), 0);
         }
     }
     private void startNavigationManager() {
@@ -838,15 +844,16 @@ public class FloatingViewService extends Service {
     ReentrantLock lock = new ReentrantLock();
 
     private void getSpeedTrap(final MatchedGeoPosition currentPosition) {
-        final double DESIRED_DISTANCE = 100;
+        final double PROJECTION_THRESHOLD = 10;
+        final double PROJECTION_DISTANCE = 100;
 
-        RoadElement roadElement = currentPosition.getRoadElement();
+        final RoadElement currentPositionRoadElement = currentPosition.getRoadElement();
+        final String currentPositionRoadElementRoadName;
 
-        if (roadElement == null) {
+        if (currentPositionRoadElement == null) {
 
         } else {
-
-            String roadName = roadElement.getRoadName();
+            currentPositionRoadElementRoadName = currentPositionRoadElement.getRoadName();
 
             ArrayList<GeoCoordinate> enRoute = new ArrayList<>();
             int index = -1;
@@ -855,7 +862,16 @@ public class FloatingViewService extends Service {
             if (lastPosition == null) {
 
             } else {
-                List<GeoCoordinate> geometry = roadElement.getGeometry();
+                List<GeoCoordinate> geometry = currentPositionRoadElement.getGeometry();
+
+                int geometrySize = geometry.size();
+                if (geometrySize != 2) {
+                    //System.out.println("Weird geometry size: " + geometrySize);
+                } else {
+                    double d = currentPositionRoadElement.getGeometryLength();
+                    //System.out.println("distance: " + d);
+                }
+
                 for (int i = 0; i < geometry.size(); i++) {
                     if (LocationHelper.isCloser(geometry.get(i), currentPosition.getCoordinate(), lastPosition.getCoordinate())) {
                         enRoute.add(geometry.get(i));
@@ -868,13 +884,13 @@ public class FloatingViewService extends Service {
                 }
             }
 
-            if (lastPosition == null || LocationHelper.distance(lastPosition.getCoordinate(), currentPosition.getCoordinate()) > 0) {
+            if (!currentPositionRoadElementRoadName.equals("") &&
+                    (lastPosition == null ||
+                            LocationHelper.distance(lastPosition.getCoordinate(), currentPosition.getCoordinate()) > PROJECTION_THRESHOLD)) {
                 lastPosition = currentPosition;
             }
 
-            if (roadName.equals("")) {
-                return;
-            } else if (index > -1) {
+            if (index > -1) {
                 double enRouteLatitude = enRoute.get(index).getLatitude();
                 double enRouteLongitude = enRoute.get(index).getLongitude();
                 double currentLatitude = currentPosition.getCoordinate().getLatitude();
@@ -883,55 +899,89 @@ public class FloatingViewService extends Service {
 
                 final GeoCoordinate projectedCoordinate = LocationHelper.getGeoCoordinateFromPositionDistanceBearing(
                         currentPosition.getCoordinate(),
-                        DESIRED_DISTANCE,
+                        PROJECTION_DISTANCE * 1.1,
                         Math.toDegrees(angle));
 
-                // dist should approximately be equal to DESIRED_DISTANCE
-                double dist = LocationHelper.distance(currentPosition.getCoordinate(), projectedCoordinate);
+                final double currentSpeedLimit = LocationHelper.metersPerSecToMilesPerHour(currentPosition.getRoadElement().getSpeedLimit());
 
-                GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(roadName);
+                // dist should approximately be equal to PROJECTION_DISTANCE
+                final double dist = LocationHelper.distance(currentPosition.getCoordinate(), projectedCoordinate);
+
+                GeocodeRequest2 geocodeRequest2 = new GeocodeRequest2(currentPositionRoadElementRoadName);
                 try {
-                    geocodeRequest2.setSearchArea(projectedCoordinate, (int) DESIRED_DISTANCE);
-                    if (lock.tryLock()) {
+                    geocodeRequest2.setSearchArea(projectedCoordinate, (int) PROJECTION_DISTANCE);
+                    if (currentSpeedLimit > SPEED_TRAP_THRESHOLD && lock.tryLock()) {
                         try {
                             if (!calculating) {
                                 calculating = true;
-                                final double currentSpeedLimit = currentPosition.getRoadElement().getSpeedLimit();
+
                                 geocodeRequest2.execute(new ResultListener<List<GeocodeResult>>() {
                                     @Override
                                     public void onCompleted(List<GeocodeResult> geocodeResults, ErrorCode errorCode) {
                                         final Router.Listener<List<RouteResult>, RoutingError> routerListener = new Router.Listener<List<RouteResult>, RoutingError>() {
                                             @Override
                                             public void onProgress(int i) {
-
+                                                System.out.println("Progress: " + i);
                                             }
 
                                             @Override
                                             public void onCalculateRouteFinished(List<RouteResult> routeResults, RoutingError routingError) {
                                                 calculating = false;
+
+                                                //get first route
                                                 Route route = routeResults.get(0).getRoute();
 
                                                 List<Maneuver> maneuvers = route.getManeuvers();
-                                                if (maneuvers.size() > 0) {
-                                                    List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
-                                                    boolean thresholdMet = false;
+
+                                                List<RouteElement> routeElements = route.getRouteElementsFromLength(100).getElements();
+
+                                                if (routeElements.size() > 0) {
+                                                    List<RoadElement> roadElements = maneuvers.get(0).getRoadElements();
+                                                    //List<RouteElement> routeElements = maneuvers.get(0).getRouteElements();
                                                     if (routeElements.size() > 1) {
 
                                                         float closestSpeedLimit = routeElements.get(0).getRoadElement().getSpeedLimit();
 
                                                         for (int i = 1; i < routeElements.size(); i++) {
+
                                                             double dist = routeElements.get(i).getGeometry().get(0).distanceTo(currentPosition.getCoordinate());
-                                                            double nextSpeedLimit = routeElements.get(i).getRoadElement().getSpeedLimit();
+                                                            System.out.println("Route Distance: " + String.format("%.2f", dist));
+
+                                                            RouteElement routeElement = routeElements.get(i);
+                                                            RoadElement roadElement = routeElement.getRoadElement();
+                                                            String roadName = roadElement.getRoadName();
+
+                                                            double nextSpeedLimit = roadElement.getSpeedLimit();
                                                             double delta = closestSpeedLimit - nextSpeedLimit;
-                                                            delta = LocationHelper.meterPerSecToMilesPerHour(delta);
-                                                            String msg = String.format("Speed Limit: %.2f (%.2f)", LocationHelper.meterPerSecToMilesPerHour(nextSpeedLimit), delta);
-                                                            System.out.println(msg);
+                                                            delta = LocationHelper.metersPerSecToMilesPerHour(delta);
+                                                            String deltaMsg = String.format("Speed Limit1: %.2f (%.2f)",
+                                                                    LocationHelper.metersPerSecToMilesPerHour(nextSpeedLimit),
+                                                                    LocationHelper.metersPerSecToMilesPerHour(closestSpeedLimit));
+
+                                                            boolean deltaThresholdMet = delta > SPEED_TRAP_THRESHOLD;
+
+                                                            String currMsg = String.format("Speed Limit2: %.2f (%.2f)",
+                                                                    LocationHelper.metersPerSecToMilesPerHour(nextSpeedLimit),
+                                                                    currentSpeedLimit);
+                                                            boolean currSpeedThresholdMet = currentSpeedLimit -
+                                                                    LocationHelper.metersPerSecToMilesPerHour(nextSpeedLimit) > SPEED_TRAP_THRESHOLD;
+
+                                                            if (!roadName.equals(currentPositionRoadElementRoadName)) {
+                                                                System.out.println(roadName + " != " + currentPositionRoadElementRoadName);
+                                                            }
 
                                                             if (nextSpeedLimit > 0 &&
-                                                                    (delta > SPEED_TRAP_THRESHOLD ||
-                                                                    currentSpeedLimit - nextSpeedLimit > SPEED_TRAP_THRESHOLD)) {
+                                                                    (deltaThresholdMet ||
+                                                                            currSpeedThresholdMet)) {
 
-                                                                Toast.makeText(getApplicationContext(), msg, Toast.LENGTH_LONG).show();
+                                                                if (deltaThresholdMet) {
+                                                                    System.out.println("Road Name: " + roadName + ", " + String.format("%s", deltaMsg));
+                                                                    Toast.makeText(getApplicationContext(), deltaMsg, Toast.LENGTH_LONG).show();
+                                                                } else {
+                                                                    System.out.println("Road Name: " + roadName + ", " + String.format("%s", currMsg));
+                                                                    List<GeoCoordinate> geometry = currentPositionRoadElement.getGeometry();
+                                                                    Toast.makeText(getApplicationContext(), currMsg, Toast.LENGTH_LONG).show();
+                                                                }
 
                                                                 if (mpLock.tryLock()) {
                                                                     try {
@@ -944,7 +994,6 @@ public class FloatingViewService extends Service {
                                                                         mpLock.unlock();
                                                                     }
                                                                 }
-                                                                thresholdMet = true;
                                                                 break;
                                                             }
                                                         }
@@ -954,7 +1003,11 @@ public class FloatingViewService extends Service {
 
                                         };
                                         if (geocodeResults.size() > 0) {
-                                            LocationHelper.calculateRoute(currentPosition.getCoordinate(), geocodeResults.get(0).getLocation().getCoordinate(), routerListener);
+                                            System.out.println("Projected Distance: " + String.format("%.2f", dist));
+                                            GeoCoordinate farthest = LocationHelper.getFarthest(currentPosition.getCoordinate(), geocodeResults);
+                                            LocationHelper.calculateRoute(currentPosition.getCoordinate(), farthest, routerListener);
+                                        } else {
+                                            calculating = false;
                                         }
                                         return;
                                     }
